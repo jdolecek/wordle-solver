@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wordle-solver"
+version = "0.1.0"
+description = "An explainable information-theoretic Wordle solver"
+requires-python = ">=3.11"
+dependencies = [
+    "wordfreq>=3.1.1",
+]
+
+[project.scripts]
+wordle-solver = "wordle_solver.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
