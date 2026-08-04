@@ -1,4 +1,4 @@
-from wordle_solver.cli import load_words
+from wordle_solver.cli import _best_expected_turns_guess, load_words
 from wordle_solver.core import WordleSolver, feedback_for
 
 
@@ -47,3 +47,10 @@ def test_explicit_solution_file_is_used(tmp_path):
     answers, guesses = load_words(answer_file, None)
     assert answers == ["bland", "crane"]
     assert guesses == answers
+
+
+def test_expected_turns_guess_accounts_for_immediate_solves():
+    answers = ["cigar", "cider", "cairn"]
+    solver = WordleSolver(answers, answers, include_answers_in_guesses=False)
+    guess = _best_expected_turns_guess(solver, solver.answers, set())
+    assert guess in answers

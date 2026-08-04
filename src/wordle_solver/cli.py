@@ -69,17 +69,24 @@ def benchmark_all_answers(answers: list[str], guesses: list[str]) -> None:
         "Level 8 random (Wordle guesses)",
         "Level 9 adaptive (Wordle guesses)",
         "Level 10 minimax (Wordle guesses)",
+        "Level 11 expected turns (Wordle guesses)",
     ]
     totals = [0] * len(strategy_names)
     solved = [0] * len(strategy_names)
     log_path = Path("mode3.log")
     print(f"\nBenchmarking {len(answers)} loaded solutions across {len(strategy_names)} strategies...")
     print(f"Complete transcript: {log_path.resolve()}")
+    # Answers that produce the same feedback share the same candidate state.
+    # Cache rankings by that state so the benchmark builds each strategy's
+    # decision tree once instead of rediscovering it for every answer.
+    choice_cache: dict[tuple[object, ...], tuple[str, ...]] = {}
 
     with log_path.open("w") as log:
         log.write(f"Mode 3 benchmark: {len(answers)} answers, {len(strategy_names)} strategies\n\n")
         for index, answer in enumerate(answers, start=1):
-            scores, transcript = _scores_for_answer(answers, guesses, answer, capture=True)
+            scores, transcript = _scores_for_answer(
+                answers, guesses, answer, capture=True, choice_cache=choice_cache
+            )
             log.write(f"===== Answer {index}/{len(answers)}: {answer} =====\n")
             log.write(transcript)
             log.write("Scores: " + ", ".join(str(score) for score in scores) + "\n\n")
@@ -110,7 +117,11 @@ def benchmark_all_answers(answers: list[str], guesses: list[str]) -> None:
 
 
 def _scores_for_answer(
-    answers: list[str], guesses: list[str], answer: str, capture: bool = False
+    answers: list[str],
+    guesses: list[str],
+    answer: str,
+    capture: bool = False,
+    choice_cache: dict[tuple[object, ...], tuple[str, ...]] | None = None,
 ) -> tuple[list[int], str] | list[int]:
     """Reuse the mode-2 strategies while suppressing their per-guess output."""
     scores: list[int] = []
@@ -118,12 +129,17 @@ def _scores_for_answer(
     with contextlib.redirect_stdout(output):
         for aggressiveness in range(1, 6):
             solver = WordleSolver(answers, guesses, aggressiveness)
-            scores.append(solve_known_level(solver, answer, aggressiveness))
-        scores.append(solve_random_level(answers, guesses, answer))
-        scores.append(solve_adaptive_level(answers, guesses, answer))
-        scores.append(solve_random_level(answers, guesses, answer, level=8, strict_guesses=True))
-        scores.append(solve_adaptive_level(answers, guesses, answer, level=9, strict_guesses=True))
-        scores.append(solve_minimax_level(answers, guesses, answer))
+            scores.append(solve_known_level(solver, answer, aggressiveness, choice_cache))
+        scores.append(solve_random_level(answers, guesses, answer, choice_cache=choice_cache))
+        scores.append(solve_adaptive_level(answers, guesses, answer, choice_cache=choice_cache))
+        scores.append(solve_random_level(
+            answers, guesses, answer, level=8, strict_guesses=True, choice_cache=choice_cache
+        ))
+        scores.append(solve_adaptive_level(
+            answers, guesses, answer, level=9, strict_guesses=True, choice_cache=choice_cache
+        ))
+        scores.append(solve_minimax_level(answers, guesses, answer, choice_cache))
+        scores.append(solve_expected_turns_level(answers, guesses, answer, choice_cache))
     if capture:
         return scores, output.getvalue()
     return scores
@@ -183,6 +199,7 @@ def solve_known_answers(answers: list[str], guesses: list[str]) -> None:
     wordle_random_score = solve_random_level(answers, guesses, answer, level=8, strict_guesses=True)
     wordle_adaptive_score = solve_adaptive_level(answers, guesses, answer, level=9, strict_guesses=True)
     minimax_score = solve_minimax_level(answers, guesses, answer)
+    expected_turns_score = solve_expected_turns_level(answers, guesses, answer)
 
     best_score = min(score for _, score in scores)
     average_score = sum(score for _, score in scores) / len(scores)
@@ -197,13 +214,19 @@ def solve_known_answers(answers: list[str], guesses: list[str]) -> None:
     print(f"  Level 8 Random (Wordle guesses): {wordle_random_score}/6")
     print(f"  Level 9 Adaptive (Wordle guesses): {wordle_adaptive_score}/6")
     print(f"  Level 10 Minimax (Wordle guesses): {minimax_score}/6")
+    print(f"  Level 11 Expected turns (Wordle guesses): {expected_turns_score}/6")
 
 
-def solve_known_level(solver: WordleSolver, answer: str, aggressiveness: int) -> int:
+def solve_known_level(
+    solver: WordleSolver,
+    answer: str,
+    aggressiveness: int,
+    choice_cache: dict[tuple[object, ...], tuple[str, ...]] | None = None,
+) -> int:
     candidates = solver.answers
     path: list[tuple[str, Feedback, int]] = []
     attempted: set[str] = set()
-    opening_guess = solver.rank_guesses(candidates, limit=1)[0].word
+    opening_guess = _ranked_words(solver, candidates, aggressiveness, choice_cache)[0]
     guess = opening_guess
 
     print(f"\nLevel {aggressiveness} ({_aggressiveness_label(aggressiveness)})")
@@ -222,8 +245,8 @@ def solve_known_level(solver: WordleSolver, answer: str, aggressiveness: int) ->
         if len(candidates) == 1:
             guess = candidates[0]
         else:
-            ranked = solver.rank_guesses(candidates, limit=len(solver.guesses))
-            guess = next((score.word for score in ranked if score.word not in attempted), answer)
+            ranked = _ranked_words(solver, candidates, aggressiveness, choice_cache)
+            guess = next((word for word in ranked if word not in attempted), answer)
 
     score = len(path)
     print(f"Score: {score}/6")
@@ -231,7 +254,9 @@ def solve_known_level(solver: WordleSolver, answer: str, aggressiveness: int) ->
 
 
 def solve_random_level(
-    answers: list[str], guesses: list[str], answer: str, level: int = 6, strict_guesses: bool = False
+    answers: list[str], guesses: list[str], answer: str, level: int = 6,
+    strict_guesses: bool = False,
+    choice_cache: dict[tuple[object, ...], tuple[str, ...]] | None = None,
 ) -> int:
     """Solve with the optimal level-5 opener and a random level thereafter."""
     solver = WordleSolver(
@@ -240,7 +265,7 @@ def solve_random_level(
     candidates = solver.answers
     attempted: set[str] = set()
     path: list[tuple[str, Feedback, int]] = []
-    guess = solver.rank_guesses(candidates, limit=1)[0].word
+    guess = _ranked_words(solver, candidates, 5, choice_cache)[0]
 
     label = "random, optimal opening" if level == 6 else "random (Wordle guesses), optimal opening"
     print(f"\nLevel {level} ({label})")
@@ -267,8 +292,8 @@ def solve_random_level(
             aggressiveness=random_level,
             include_answers_in_guesses=not strict_guesses,
         )
-        ranked = random_solver.rank_guesses(candidates, limit=len(random_solver.guesses))
-        guess = next((score.word for score in ranked if score.word not in attempted), answer)
+        ranked = _ranked_words(random_solver, candidates, random_level, choice_cache)
+        guess = next((word for word in ranked if word not in attempted), answer)
         print(f"  Next aggressiveness: {random_level}")
 
     score = len(path)
@@ -277,7 +302,9 @@ def solve_random_level(
 
 
 def solve_adaptive_level(
-    answers: list[str], guesses: list[str], answer: str, level: int = 7, strict_guesses: bool = False
+    answers: list[str], guesses: list[str], answer: str, level: int = 7,
+    strict_guesses: bool = False,
+    choice_cache: dict[tuple[object, ...], tuple[str, ...]] | None = None,
 ) -> int:
     """Use historical answer frequency first, then adapt between two methods."""
     frequency_solver = WordleSolver(
@@ -317,8 +344,12 @@ def solve_adaptive_level(
             guess = candidates[0]
             continue
 
-        frequency_guess = _next_untried(frequency_solver, candidates, attempted, aggressiveness=1)
-        entropy_guess = _next_untried(entropy_solver, candidates, attempted, aggressiveness=5)
+        frequency_guess = _next_untried(
+            frequency_solver, candidates, attempted, aggressiveness=1, choice_cache=choice_cache
+        )
+        entropy_guess = _next_untried(
+            entropy_solver, candidates, attempted, aggressiveness=5, choice_cache=choice_cache
+        )
         frequency_remaining = _remaining_after_guess(frequency_guess, candidates, answer)
         entropy_remaining = _remaining_after_guess(entropy_guess, candidates, answer)
 
@@ -335,7 +366,10 @@ def solve_adaptive_level(
     return score
 
 
-def solve_minimax_level(answers: list[str], guesses: list[str], answer: str) -> int:
+def solve_minimax_level(
+    answers: list[str], guesses: list[str], answer: str,
+    choice_cache: dict[tuple[object, ...], tuple[str, ...]] | None = None,
+) -> int:
     """Use Wordle guesses, minimizing the worst-case remaining answer set."""
     solver = WordleSolver(answers, guesses, aggressiveness=5, include_answers_in_guesses=False)
     candidates = solver.answers
@@ -344,7 +378,16 @@ def solve_minimax_level(answers: list[str], guesses: list[str], answer: str) -> 
     print("\nLevel 10 (minimax, Wordle guesses)")
 
     while True:
-        guess = candidates[0] if len(candidates) == 1 else _best_minimax_guess(solver, candidates, attempted)
+        if len(candidates) == 1:
+            guess = candidates[0]
+        else:
+            key = ("minimax", tuple(solver.guesses), tuple(candidates), tuple(sorted(attempted)))
+            cached = choice_cache.get(key) if choice_cache is not None else None
+            if cached is None:
+                cached = (_best_minimax_guess(solver, candidates, attempted),)
+                if choice_cache is not None:
+                    choice_cache[key] = cached
+            guess = cached[0]
         result = feedback_for(guess, answer)
         candidates = [word for word in candidates if feedback_for(guess, word) == result]
         attempted.add(guess)
@@ -359,6 +402,79 @@ def solve_minimax_level(answers: list[str], guesses: list[str], answer: str) -> 
     score = len(path)
     print(f"Level 10 score: {score}/6")
     return score
+
+
+def solve_expected_turns_level(
+    answers: list[str], guesses: list[str], answer: str,
+    choice_cache: dict[tuple[object, ...], tuple[str, ...]] | None = None,
+) -> int:
+    """Minimize expected candidates left, treating an immediate solve as zero work."""
+    solver = WordleSolver(answers, guesses, aggressiveness=5, include_answers_in_guesses=False)
+    candidates = solver.answers
+    attempted: set[str] = set()
+    path: list[str] = []
+    print("\nLevel 11 (expected turns, Wordle guesses)")
+
+    while True:
+        if len(candidates) == 1:
+            guess = candidates[0]
+        else:
+            key = ("expected", tuple(solver.guesses), tuple(candidates), tuple(sorted(attempted)))
+            cached = choice_cache.get(key) if choice_cache is not None else None
+            if cached is None:
+                cached = (_best_expected_turns_guess(solver, candidates, attempted),)
+                if choice_cache is not None:
+                    choice_cache[key] = cached
+            guess = cached[0]
+        result = feedback_for(guess, answer)
+        candidates = [word for word in candidates if feedback_for(guess, word) == result]
+        attempted.add(guess)
+        path.append(guess)
+        print(
+            f"Guess {len(path)}: {guess.upper()} -> {format_feedback(result)} "
+            f"({len(candidates)} possible answer{'s' if len(candidates) != 1 else ''} remain)"
+        )
+        if guess == answer:
+            break
+
+    score = len(path)
+    print(f"Level 11 score: {score}/6")
+    return score
+
+
+def _best_expected_turns_guess(
+    solver: WordleSolver, candidates: list[str], attempted: set[str]
+) -> str:
+    """Choose the guess with least expected remaining work after this turn.
+
+    Unlike ordinary expected partition size, the all-green partition contributes
+    zero: guessing the answer finishes the game rather than leaving one candidate.
+    """
+    solved = (2, 2, 2, 2, 2)
+    scored: list[tuple[float, int, float, str]] = []
+    for guess in solver._guess_pool(candidates):
+        if guess in attempted:
+            continue
+        partitions: dict[Feedback, int] = {}
+        for candidate in candidates:
+            result = feedback_for(guess, candidate)
+            partitions[result] = partitions.get(result, 0) + 1
+        total = len(candidates)
+        expected_work = sum(
+            size * size for result, size in partitions.items() if result != solved
+        ) / total
+        scored.append(
+            (
+                expected_work,
+                max(partitions.values()),
+                sum(size * size for size in partitions.values()) / total,
+                guess,
+            )
+        )
+
+    if not scored:
+        return candidates[0]
+    return min(scored)[3]
 
 
 def _best_minimax_guess(solver: WordleSolver, candidates: list[str], attempted: set[str]) -> str:
@@ -384,9 +500,30 @@ def _next_untried(
     candidates: list[str],
     attempted: set[str],
     aggressiveness: int,
+    choice_cache: dict[tuple[object, ...], tuple[str, ...]] | None = None,
 ) -> str:
-    ranked = solver.rank_guesses(candidates, limit=len(solver.guesses), aggressiveness=aggressiveness)
-    return next((score.word for score in ranked if score.word not in attempted), candidates[0])
+    ranked = _ranked_words(solver, candidates, aggressiveness, choice_cache)
+    return next((word for word in ranked if word not in attempted), candidates[0])
+
+
+def _ranked_words(
+    solver: WordleSolver,
+    candidates: list[str],
+    aggressiveness: int,
+    choice_cache: dict[tuple[object, ...], tuple[str, ...]] | None,
+) -> tuple[str, ...]:
+    key = ("rank", aggressiveness, tuple(solver.guesses), tuple(candidates))
+    if choice_cache is not None and key in choice_cache:
+        return choice_cache[key]
+    ranked = tuple(
+        score.word
+        for score in solver.rank_guesses(
+            candidates, limit=len(solver.guesses), aggressiveness=aggressiveness
+        )
+    )
+    if choice_cache is not None:
+        choice_cache[key] = ranked
+    return ranked
 
 
 def _remaining_after_guess(guess: str, candidates: list[str], answer: str) -> int:
@@ -454,3 +591,7 @@ def _is_wordle_word(word: str) -> bool:
     # Keep less frequent playable words such as "bland" without opening the
     # full obscure-word tail of the general English frequency list.
     return zipf_frequency(word, "en") >= 3.5
+
+
+if __name__ == "__main__":
+    main()

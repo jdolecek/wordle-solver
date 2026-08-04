@@ -27,12 +27,14 @@ pytest
 wordle-solver
 ```
 
-At startup, choose one of two modes:
+At startup, choose one of three modes:
 
 - **Benchmark all loaded Wordle solutions:** enter nothing; the solver runs all
-	ten strategies against every answer in the loaded solution list and reports
+	eleven strategies against every answer in the loaded solution list and reports
 	average scores and solve rates. The lowest average score is the winner.
 	It also writes a complete transcript to `mode3.log` in the current directory.
+	Rankings for shared candidate states are cached, so equivalent branches across
+	different answers are calculated only once.
 
 - **Play with the solver:** choose one aggressiveness level from 1 to 5. Level 1
 	is **conservative** and favors statistically likely answer words. Level 3
@@ -40,7 +42,7 @@ At startup, choose one of two modes:
 	guesses that split the remaining answer set into the most informative
 	feedback groups.
 - **Solve a known answer:** enter the answer once; the solver automatically runs
-	all five aggressiveness levels, then runs a sixth random strategy. The random
+	all five aggressiveness levels, then runs additional comparison strategies. The random
 	strategy always uses the level-5 optimal opening word and randomly chooses a
 	level from 1 to 5 for each later guess. It reports every path and score,
 	followed by a summary showing the best deterministic score, the average for
@@ -49,6 +51,11 @@ At startup, choose one of two modes:
 	Level 10 is a risk-averse minimax strategy using only accepted Wordle guesses.
 	It minimizes the largest possible remaining answer group, then breaks ties by
 	information gain and historical word frequency.
+
+Level 11 directly minimizes expected remaining work. Its score is the expected
+partition size, except that the all-green partition counts as zero because an
+immediate correct answer ends the game. This small but important distinction
+makes the objective align more closely with number of guesses than entropy does.
 
 Levels 8 and 9 repeat levels 6 and 7 using only the supplied accepted-Wordle
 guess list (`data/guesses.txt`) as their guess pool. Level 8 is random after
