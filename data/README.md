@@ -1,19 +1,21 @@
 # Word Lists
 
-Place the official/current Wordle answer list in `solutions.txt`, one lowercase
-five-letter word per line. Place the complete accepted-guess list in
-`guesses.txt` if available. The solver automatically prefers these files over
-its frequency-based fallback.
+The bundled `solutions.txt` contains the 2,315-word original public Wordle
+solution set. Place the complete accepted-guess list in `guesses.txt` if
+available. The solver automatically prefers these files over its
+frequency-based fallback.
 
-Answer entries are filtered to lowercase five-letter words and words that do
-not end in `s`, which excludes capitalized proper-name-looking entries and
-common plural forms. The guess list remains broader because plural words can
-still be useful as information probes.
+Answer entries are filtered to lowercase five-letter alphabetic words. Words
+ending in `s` are retained because valid singular answers such as `glass`,
+`class`, and `press` would otherwise be lost.
 
-The solver does not include a copied proprietary or unofficial list. The
-classic public answer snapshot commonly circulated online contains about 2,315
-words, while newer snapshots are often reported as roughly 3,189 words. Verify
-the source and count of any list before using it for a specific Wordle version.
+The New York Times can make editorial additions and removals, so this is not a
+guarantee of its current internal candidate set. Replace the file with a newer
+verified list when one is available.
+
+`optimal_strategy.txt` is Alex Selby's published normal-mode decision tree for
+this exact 2,315-answer set. It is only enabled when the loaded answers match
+that set exactly.
 
 You can also pass lists explicitly:
 

@@ -29,24 +29,22 @@ wordle-solver
 
 At startup, choose one of three modes:
 
-- **Benchmark all loaded Wordle solutions:** enter nothing; the solver runs all
-	eleven strategies against every answer in the loaded solution list and reports
+- **Benchmark all loaded Wordle solutions:** the solver runs the four retained
+	strategies (Levels 5, 10, 11, and 12) against every answer in the loaded solution list and reports
 	average scores and solve rates. The lowest average score is the winner.
 	It also writes a complete transcript to `mode3.log` in the current directory.
 	Rankings for shared candidate states are cached, so equivalent branches across
 	different answers are calculated only once.
 
-- **Play with the solver:** choose one aggressiveness level from 1 to 5. Level 1
-	is **conservative** and favors statistically likely answer words. Level 3
-	blends likelihood and information gain. Level 5 is **greedy** and favors
-	guesses that split the remaining answer set into the most informative
-	feedback groups.
+- **Play with the solver:** with the bundled answer set, the solver follows the
+	provably optimal Level 12 decision tree. Custom dictionaries fall back to the
+	greedy Level 5 information strategy.
 - **Solve a known answer:** enter the answer once; the solver automatically runs
-	all five aggressiveness levels, then runs additional comparison strategies. The random
-	strategy always uses the level-5 optimal opening word and randomly chooses a
-	level from 1 to 5 for each later guess. It reports every path and score,
-	followed by a summary showing the best deterministic score, the average for
-	levels 1-5, the level-6 random score, and the level-7 adaptive score.
+	all four retained comparison strategies and reports every path and score.
+
+- **Resume a puzzle:** enter every guess you have already played and its `g/y/b`
+	feedback. The solver validates the combined history, narrows the answer list,
+	and continues with recommendations from the current puzzle state.
 
 	Level 10 is a risk-averse minimax strategy using only accepted Wordle guesses.
 	It minimizes the largest possible remaining answer group, then breaks ties by
@@ -57,20 +55,15 @@ partition size, except that the all-green partition counts as zero because an
 immediate correct answer ends the game. This small but important distinction
 makes the objective align more closely with number of guesses than entropy does.
 
-Levels 8 and 9 repeat levels 6 and 7 using only the supplied accepted-Wordle
-guess list (`data/guesses.txt`) as their guess pool. Level 8 is random after
-its optimal opening; level 9 adapts between frequency and entropy after its
-historical-frequency opening.
+Level 12 follows Alex Selby's published exact normal-mode decision tree. For
+the bundled 2,315 answers it starts with `SALET`, requires exactly 7,920 total
+guesses (3.42117 average), and solves every answer within five guesses. The
+result is globally optimal under a uniform answer probability and the original
+12,972-word accepted-guess set.
 
-Level 7 starts with the most statistically frequent historical answer word.
-For every later guess it compares a frequency-ranked guess with an
-entropy-ranked guess using the actual answer's feedback, keeps the method that
-leaves fewer possible answers, and repeats that comparison on the next turn.
-
-The known-answer paths use each aggressiveness setting at every turn. At each
-turn they blend English-frequency likelihood with expected information gain,
-then use worst-case partition size as a tie-breaker. These are greedy
-mathematical strategies, not exhaustive proofs of the globally shortest path.
+Level 5 uses expected information gain with worst-case partition size as a
+tie-breaker. These are greedy mathematical strategies, not exhaustive proofs
+of the globally shortest path.
 
 The solver tells you which guess to enter. After entering it in the online game, provide only its result. Use `g` for green, `y` for yellow, and `b` for gray:
 
@@ -83,9 +76,10 @@ You may also use `2`, `1`, and `0` instead of letters. The solver prints the ten
 
 For a controlled or official Wordle dictionary, put one word per line in
 `data/solutions.txt` and optionally `data/guesses.txt`; these files are used
-automatically when present. Answer entries are filtered to lowercase
-five-letter words and words not ending in `s` as a conservative plural/name
-filter. You can also provide them explicitly:
+automatically when present. The bundled 2,315-word public solution set includes
+words such as `posit`, `gripe`, and `prove`, without admitting proper names from
+the frequency-based fallback. Answer entries are filtered to lowercase
+five-letter alphabetic words. You can also provide lists explicitly:
 
 ```sh
 wordle-solver --answers data/answers.txt --guesses data/guesses.txt

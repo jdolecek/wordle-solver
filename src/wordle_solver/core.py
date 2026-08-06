@@ -98,7 +98,14 @@ class WordleSolver:
 
         return sorted(
             scored,
-            key=lambda score: (-priority(score), score.worst_case, score.expected_remaining, score.word),
+            key=lambda score: (
+                -priority(score),
+                score.worst_case,
+                score.expected_remaining,
+                score.word not in candidates,
+                -self._frequency[score.word],
+                score.word,
+            ),
         )[:limit]
 
     def _guess_pool(self, candidates: list[str]) -> list[str]:

@@ -5,6 +5,7 @@ import contextlib
 import io
 import random
 import sys
+from functools import lru_cache
 from math import log2
 from pathlib import Path
 
@@ -25,19 +26,14 @@ def main() -> None:
     elif mode == "benchmark":
         benchmark_all_answers(answers, guesses)
     else:
-        aggressiveness = choose_aggressiveness()
-        solver = WordleSolver(answers, guesses, aggressiveness)
-        run_interactive(solver)
-
-
-def choose_aggressiveness() -> int:
-    print("\nHow aggressive should the solver be?")
-    print("1 = conservative (most likely words), 5 = greedy (most information)")
-    while True:
-        value = input("Choose aggressiveness (1-5): ").strip()
-        if value in {"1", "2", "3", "4", "5"}:
-            return int(value)
-        print("Please choose a number from 1 to 5.")
+        solver = WordleSolver(answers, guesses, aggressiveness=5)
+        history = collect_existing_history(solver) if mode == "resume" else None
+        if optimal_strategy_available(answers) and optimal_history_supported(history or []):
+            run_optimal_interactive(solver, history)
+        else:
+            if history:
+                print("\nThat history is outside Level 12's fixed tree; continuing with Level 5.")
+            run_interactive(solver, history)
 
 
 def choose_mode() -> str:
@@ -45,32 +41,29 @@ def choose_mode() -> str:
     print("1. Play with the solver")
     print("2. Solve a known answer and calculate the score")
     print("3. Benchmark all loaded Wordle solutions")
+    print("4. Resume a puzzle already in progress")
     while True:
-        choice = input("Choose a mode (1/2): ").strip().lower()
+        choice = input("Choose a mode (1/2/3/4): ").strip().lower()
         if choice in {"1", "play", "interactive"}:
             return "interactive"
         if choice in {"2", "solve", "known"}:
             return "known"
         if choice in {"3", "benchmark", "all"}:
             return "benchmark"
-        print("Please choose 1, 2, or 3.")
+        if choice in {"4", "resume", "existing"}:
+            return "resume"
+        print("Please choose 1, 2, 3, or 4.")
 
 
 def benchmark_all_answers(answers: list[str], guesses: list[str]) -> None:
     """Run every strategy against every loaded answer without interactive input."""
     strategy_names = [
-        "Level 1 conservative",
-        "Level 2 cautious",
-        "Level 3 balanced",
-        "Level 4 bold",
         "Level 5 greedy",
-        "Level 6 random",
-        "Level 7 adaptive",
-        "Level 8 random (Wordle guesses)",
-        "Level 9 adaptive (Wordle guesses)",
         "Level 10 minimax (Wordle guesses)",
         "Level 11 expected turns (Wordle guesses)",
     ]
+    if optimal_strategy_available(answers):
+        strategy_names.append("Level 12 provably optimal")
     totals = [0] * len(strategy_names)
     solved = [0] * len(strategy_names)
     log_path = Path("mode3.log")
@@ -127,30 +120,65 @@ def _scores_for_answer(
     scores: list[int] = []
     output = io.StringIO()
     with contextlib.redirect_stdout(output):
-        for aggressiveness in range(1, 6):
-            solver = WordleSolver(answers, guesses, aggressiveness)
-            scores.append(solve_known_level(solver, answer, aggressiveness, choice_cache))
-        scores.append(solve_random_level(answers, guesses, answer, choice_cache=choice_cache))
-        scores.append(solve_adaptive_level(answers, guesses, answer, choice_cache=choice_cache))
-        scores.append(solve_random_level(
-            answers, guesses, answer, level=8, strict_guesses=True, choice_cache=choice_cache
-        ))
-        scores.append(solve_adaptive_level(
-            answers, guesses, answer, level=9, strict_guesses=True, choice_cache=choice_cache
-        ))
+        solver = WordleSolver(answers, guesses, aggressiveness=5)
+        scores.append(solve_known_level(solver, answer, 5, choice_cache))
         scores.append(solve_minimax_level(answers, guesses, answer, choice_cache))
         scores.append(solve_expected_turns_level(answers, guesses, answer, choice_cache))
+        if optimal_strategy_available(answers):
+            scores.append(solve_optimal_level(answer))
     if capture:
         return scores, output.getvalue()
     return scores
 
 
-def run_interactive(solver: WordleSolver) -> None:
+def collect_existing_history(solver: WordleSolver) -> list[tuple[str, Feedback]]:
+    """Collect guesses already played, rejecting contradictory feedback."""
     history: list[tuple[str, Feedback]] = []
+    print("\nEnter each guess you already played and its feedback.")
+    print("Use g/y/b for green/yellow/gray. Press Enter at the guess prompt when done.")
+    while True:
+        guess = input("Previous guess (or Enter to continue): ").strip().lower()
+        if not guess:
+            return history
+        if len(guess) != 5 or not guess.isalpha():
+            print("Input error: guess must be exactly five letters.", file=sys.stderr)
+            continue
+
+        result_text = input(f"Result for {guess.upper()} (g/y/b): ").strip().lower()
+        try:
+            result = parse_feedback(result_text)
+        except ValueError as error:
+            print(f"Input error: {error}", file=sys.stderr)
+            continue
+
+        proposed = [*history, (guess, result)]
+        candidates = solver.narrow(proposed)
+        if not candidates and result != (2, 2, 2, 2, 2):
+            print(
+                "That feedback conflicts with the earlier entries; the guess was not added.",
+                file=sys.stderr,
+            )
+            continue
+        history = proposed
+        print(f"  {len(candidates)} possible answer{'s' if len(candidates) != 1 else ''} remain.")
+        if result == (2, 2, 2, 2, 2):
+            return history
+
+
+def run_interactive(
+    solver: WordleSolver, history: list[tuple[str, Feedback]] | None = None
+) -> None:
+    history = list(history or [])
+    if history and history[-1][1] == (2, 2, 2, 2, 2):
+        print(f"\nPuzzle already solved with {history[-1][0].upper()}.")
+        return
 
     opening_guess = solver.rank_guesses(solver.answers, limit=1)[0].word
     print("Wordle solver. Enter feedback as g/y/b (green/yellow/gray). Type quit to exit.")
-    print(f"Opening guess: {opening_guess.upper()}")
+    if not history:
+        print(f"Opening guess: {opening_guess.upper()}")
+    else:
+        print(f"Continuing after {len(history)} previous guess{'es' if len(history) != 1 else ''}.")
     while True:
         candidates = solver.narrow(history)
         print(f"\n{len(candidates)} possible answers remain.")
@@ -180,6 +208,50 @@ def run_interactive(solver: WordleSolver) -> None:
             print(f"Input error: {error}", file=sys.stderr)
 
 
+def optimal_history_supported(history: list[tuple[str, Feedback]]) -> bool:
+    """Return whether prior guesses follow the exact optimal policy."""
+    policy, _ = load_optimal_policy()
+    feedback_history: list[str] = []
+    for guess, result in history:
+        expected = policy.get(tuple(feedback_history))
+        if guess != expected:
+            return False
+        feedback_history.append(format_feedback(result).upper())
+    return tuple(feedback_history) in policy or bool(history and history[-1][1] == (2, 2, 2, 2, 2))
+
+
+def run_optimal_interactive(
+    solver: WordleSolver, history: list[tuple[str, Feedback]] | None = None
+) -> None:
+    """Play or resume along the globally optimal decision tree."""
+    history = list(history or [])
+    policy, _ = load_optimal_policy()
+    print("Wordle solver: Level 12 provably optimal strategy.")
+    while True:
+        candidates = solver.narrow(history)
+        if history and history[-1][1] == (2, 2, 2, 2, 2):
+            print(f"Puzzle solved with {history[-1][0].upper()}.")
+            return
+        feedback_history = tuple(format_feedback(result).upper() for _, result in history)
+        guess = policy[feedback_history]
+        print(f"\n{len(candidates)} possible answers remain.")
+        print("Top potential matches:")
+        print("  " + ", ".join(solver.top_matches(candidates)))
+        print(f"Optimal next guess: {guess.upper()}")
+        result_text = input(f"Enter result for {guess.upper()} (g/y/b), or quit: ").strip().lower()
+        if result_text in {"quit", "q", "exit"}:
+            return
+        try:
+            result = parse_feedback(result_text)
+            proposed = [*history, (guess, result)]
+            if not solver.narrow(proposed):
+                print("Input error: that feedback leaves no possible answers.", file=sys.stderr)
+                continue
+            history = proposed
+        except ValueError as error:
+            print(f"Input error: {error}", file=sys.stderr)
+
+
 def solve_known_answers(answers: list[str], guesses: list[str]) -> None:
     while True:
         answer = input("Enter the five-letter answer to solve: ").strip().lower()
@@ -187,34 +259,20 @@ def solve_known_answers(answers: list[str], guesses: list[str]) -> None:
             break
         print("That word is not in the current answer dictionary. Try again.", file=sys.stderr)
 
-    print(f"\nSolving {answer.upper()} at all aggressiveness levels")
-    scores: list[tuple[int, int]] = []
-    for aggressiveness in range(1, 6):
-        solver = WordleSolver(answers, guesses, aggressiveness)
-        score = solve_known_level(solver, answer, aggressiveness)
-        scores.append((aggressiveness, score))
+    print(f"\nSolving {answer.upper()} with all retained strategies")
+    solver = WordleSolver(answers, guesses, aggressiveness=5)
+    greedy_score = solve_known_level(solver, answer, 5)
 
-    random_score = solve_random_level(answers, guesses, answer)
-    level_seven_score = solve_adaptive_level(answers, guesses, answer)
-    wordle_random_score = solve_random_level(answers, guesses, answer, level=8, strict_guesses=True)
-    wordle_adaptive_score = solve_adaptive_level(answers, guesses, answer, level=9, strict_guesses=True)
     minimax_score = solve_minimax_level(answers, guesses, answer)
     expected_turns_score = solve_expected_turns_level(answers, guesses, answer)
+    optimal_score = solve_optimal_level(answer) if optimal_strategy_available(answers) else None
 
-    best_score = min(score for _, score in scores)
-    average_score = sum(score for _, score in scores) / len(scores)
-    best_levels = [str(level) for level, score in scores if score == best_score]
     print("\nSummary")
-    for level, score in scores:
-        print(f"  Level {level}: {score}/6")
-    print(f"  Best score: {best_score}/6 (level {', '.join(best_levels)})")
-    print(f"  Average score - levels 1-5: {average_score:.1f}/6")
-    print(f"  Level 6 Random: {random_score}/6")
-    print(f"  Level 7 Adaptive: {level_seven_score}/6")
-    print(f"  Level 8 Random (Wordle guesses): {wordle_random_score}/6")
-    print(f"  Level 9 Adaptive (Wordle guesses): {wordle_adaptive_score}/6")
+    print(f"  Level 5 Greedy: {greedy_score}/6")
     print(f"  Level 10 Minimax (Wordle guesses): {minimax_score}/6")
     print(f"  Level 11 Expected turns (Wordle guesses): {expected_turns_score}/6")
+    if optimal_score is not None:
+        print(f"  Level 12 Provably optimal: {optimal_score}/6")
 
 
 def solve_known_level(
@@ -442,6 +500,58 @@ def solve_expected_turns_level(
     return score
 
 
+def solve_optimal_level(answer: str) -> int:
+    """Follow the published globally optimal normal-mode decision tree."""
+    policy, _ = load_optimal_policy()
+    feedback_history: list[str] = []
+    print("\nLevel 12 (provably optimal decision tree)")
+    for turn in range(1, 6):
+        guess = policy[tuple(feedback_history)]
+        result = feedback_for(guess, answer)
+        feedback_text = format_feedback(result).upper()
+        feedback_history.append(feedback_text)
+        print(f"Guess {turn}: {guess.upper()} -> {feedback_text.lower()}")
+        if guess == answer:
+            print(f"Level 12 score: {turn}/6")
+            return turn
+    raise RuntimeError(f"optimal strategy did not solve {answer}")
+
+
+def optimal_strategy_available(answers: list[str]) -> bool:
+    """Return whether the bundled exact policy matches this answer set."""
+    _, policy_answers = load_optimal_policy()
+    return set(answers) == policy_answers
+
+
+@lru_cache(maxsize=1)
+def load_optimal_policy() -> tuple[dict[tuple[str, ...], str], set[str]]:
+    """Parse Alex Selby's fixed-width optimal decision-tree format."""
+    path = Path(__file__).resolve().parents[2] / "data" / "optimal_strategy.txt"
+    policy: dict[tuple[str, ...], str] = {}
+    answers: set[str] = set()
+    guesses: list[str] = []
+    feedbacks: list[str] = []
+
+    for line in path.read_text().splitlines():
+        for depth in range((len(line) + 12) // 13):
+            segment = line[depth * 13 : (depth + 1) * 13].ljust(13)
+            word = segment[:5].strip().lower()
+            feedback = segment[6:11]
+            if word:
+                guesses[depth:] = [word]
+                feedbacks[depth:] = []
+            if feedback.strip():
+                feedbacks[depth:] = [feedback]
+                key = tuple(feedbacks[:depth])
+                existing = policy.setdefault(key, guesses[depth])
+                if existing != guesses[depth]:
+                    raise ValueError("conflicting guesses in optimal strategy")
+                if feedback == "GGGGG":
+                    answers.add(guesses[depth])
+
+    return policy, answers
+
+
 def _best_expected_turns_guess(
     solver: WordleSolver, candidates: list[str], attempted: set[str]
 ) -> str:
@@ -451,7 +561,8 @@ def _best_expected_turns_guess(
     zero: guessing the answer finishes the game rather than leaving one candidate.
     """
     solved = (2, 2, 2, 2, 2)
-    scored: list[tuple[float, int, float, str]] = []
+    candidate_set = set(candidates)
+    scored: list[tuple[float, int, float, bool, float, str]] = []
     for guess in solver._guess_pool(candidates):
         if guess in attempted:
             continue
@@ -468,17 +579,20 @@ def _best_expected_turns_guess(
                 expected_work,
                 max(partitions.values()),
                 sum(size * size for size in partitions.values()) / total,
+                guess not in candidate_set,
+                -solver._frequency.get(guess, 0.0),
                 guess,
             )
         )
 
     if not scored:
         return candidates[0]
-    return min(scored)[3]
+    return min(scored)[5]
 
 
 def _best_minimax_guess(solver: WordleSolver, candidates: list[str], attempted: set[str]) -> str:
-    scored: list[tuple[int, float, float, str]] = []
+    candidate_set = set(candidates)
+    scored: list[tuple[int, float, bool, float, str]] = []
     for guess in solver.guesses:
         if guess in attempted:
             continue
@@ -488,11 +602,19 @@ def _best_minimax_guess(solver: WordleSolver, candidates: list[str], attempted: 
             partitions[result] = partitions.get(result, 0) + 1
         total = len(candidates)
         entropy = sum((size / total) * log2(total / size) for size in partitions.values())
-        scored.append((max(partitions.values()), -entropy, -solver._frequency.get(guess, 0.0), guess))
+        scored.append(
+            (
+                max(partitions.values()),
+                -entropy,
+                guess not in candidate_set,
+                -solver._frequency.get(guess, 0.0),
+                guess,
+            )
+        )
 
     if not scored:
         return candidates[0]
-    return min(scored)[3]
+    return min(scored)[4]
 
 
 def _next_untried(
@@ -582,15 +704,15 @@ def _is_answer_word(word: str) -> bool:
     normalized = word.strip()
     if len(normalized) != 5 or not normalized.isalpha() or normalized != normalized.lower():
         return False
-    return not normalized.endswith("s")
+    return True
 
 
 def _is_wordle_word(word: str) -> bool:
     from wordfreq import zipf_frequency
 
-    # Keep less frequent playable words such as "bland" without opening the
-    # full obscure-word tail of the general English frequency list.
-    return zipf_frequency(word, "en") >= 3.5
+    # NYT answers can be uncommon (for example POSIT and GRIPE). Keep a broad
+    # candidate set without opening the full obscure-token tail of wordfreq.
+    return zipf_frequency(word, "en") >= 2.75
 
 
 if __name__ == "__main__":
