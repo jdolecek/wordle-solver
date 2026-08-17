@@ -7,9 +7,12 @@ An interactive Python Wordle solver that explains each recommendation.
 The `web/` application provides the same optimal solver in a mobile-first
 interface that runs entirely in Chrome. It includes six ranked choices,
 tap-to-color feedback tiles, custom-guess overrides, undo, automatic saved
-progress, and offline support after the first visit. Its comparison mode accepts
-a known answer and shows the exact score and guess path for Levels 5, 10, 11,
-and 12. Overall benchmark statistics remain available on the same screen.
+progress, and offline support after the first visit. Players can choose the
+modern 3,209-word NYT WordleBot answer list, the original 2,315-word list, or a
+broad 14,855-word accepted-guess list. Only the original dictionary uses the
+exact Level 12 tree; expanded dictionaries use the flexible Level 5 strategy.
+The comparison mode accepts a known original-list answer and shows the exact
+score and guess path for Levels 5, 10, 11, and 12.
 
 The production bundle is published from the repository's `gh-pages` branch.
 For this repository the address is:
@@ -23,7 +26,7 @@ To test it locally, assemble the static data and serve it over HTTP:
 ```sh
 mkdir -p /tmp/wordle-solver-web/data
 cp -R web/. /tmp/wordle-solver-web/
-cp data/solutions.txt data/optimal_strategy.txt /tmp/wordle-solver-web/data/
+cp data/solutions.txt data/nyt_wordlebot_answers.txt data/nyt_accepted_guesses.txt data/optimal_strategy.txt /tmp/wordle-solver-web/data/
 python3 -m http.server 8000 --directory /tmp/wordle-solver-web
 ```
 

@@ -17,7 +17,7 @@
     Promise.all([
       caches.keys().then(keys => Promise.all(keys.map(key => caches.delete(key)))),
       navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(items => Promise.all(items.map(item => item.unregister()))) : Promise.resolve()
-    ]).then(() => location.replace("./?refreshed=7"));
+    ]).then(() => location.replace("./?refreshed=8"));
   </script>
 </body>
 </html>

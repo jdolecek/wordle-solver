@@ -1,6 +1,29 @@
 const MARKS = ["gray", "yellow", "green"];
 const MARK_CHARS = ["B", "Y", "G"];
 const STORAGE_KEY = "wordle-solver-game-v1";
+const DICTIONARY_KEY = "wordle-solver-dictionary-v1";
+const DICTIONARY_META = {
+  nyt: {
+    label: "NYT 3,209",
+    description: "Modern likely-answer list maintained from NYT WordleBot. Uses the flexible Level 5 strategy.",
+    start: "Begin with SALET using 3,209 modern likely answers.",
+  },
+  original: {
+    label: "Original 2,315",
+    description: "Original public solution list. This is the only dictionary with the exact Level 12 guarantee.",
+    start: "Begin with SALET and follow the provably optimal Level 12 tree.",
+  },
+  broad: {
+    label: "Broad 14,855",
+    description: "Every accepted NYT guess is treated as a possible answer. Safest coverage, but slower and less targeted.",
+    start: "Begin with SALET using every accepted word as a possible answer.",
+  },
+};
+const ROOT_ALTERNATIVES = {
+  original: ["raise", "slate", "crate", "irate", "trace"],
+  nyt: ["tarse", "tiare", "sater", "roate", "raise"],
+  broad: ["tares", "lares", "rales", "rates", "ranes"],
+};
 const STRATEGY_STATS = [
   { level: 5, name: "Greedy information", min: 2, average: 3.45788, max: 5, counts: [82, 1156, 1012, 65] },
   { level: 10, name: "Risk-averse minimax", min: 2, average: 3.47862, max: 5, counts: [83, 1106, 1061, 65] },
@@ -9,14 +32,17 @@ const STRATEGY_STATS = [
 ];
 
 const els = {};
+let dictionaries = {};
 let answers = [];
-let answerSet = new Set();
+let acceptedGuesses = [];
 let policy = new Map();
 let methodComparisons = {};
+let dictionaryOpenings = {};
+let selectedDictionary = "nyt";
 let state = freshState();
 
-function freshState() {
-  return { history: [], optimal: true, selectedGuess: null, feedback: [0, 0, 0, 0, 0] };
+function freshState(dictionary = selectedDictionary) {
+  return { dictionary, history: [], optimal: dictionary === "original", selectedGuess: null, feedback: [0, 0, 0, 0, 0] };
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
@@ -27,6 +53,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     startNew: document.getElementById("start-new"),
     continueGame: document.getElementById("continue-game"),
     continueDescription: document.getElementById("continue-description"),
+    dictionaryChoice: document.getElementById("dictionary-choice"),
+    dictionaryDescription: document.getElementById("dictionary-description"),
+    startNewDescription: document.getElementById("start-new-description"),
     resumeExisting: document.getElementById("resume-existing"),
     showStats: document.getElementById("show-stats"),
     stats: document.getElementById("stats"),
@@ -41,6 +70,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     comparisonList: document.getElementById("comparison-list"),
     candidateCount: document.getElementById("candidate-count"),
     candidateLabel: document.getElementById("candidate-label"),
+    activeDictionary: document.getElementById("active-dictionary"),
     history: document.getElementById("history"),
     recommendations: document.getElementById("recommendations"),
     strategyLabel: document.getElementById("strategy-label"),
@@ -62,15 +92,23 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
   bindEvents();
   try {
-    const [answerText, treeText, comparisonData] = await Promise.all([
+    selectedDictionary = localStorage.getItem(DICTIONARY_KEY) || "nyt";
+    if (!DICTIONARY_META[selectedDictionary]) selectedDictionary = "nyt";
+    const [answerText, nytAnswerText, guessText, treeText, comparisonData, openingData] = await Promise.all([
       fetch("data/solutions.txt").then(requireOk).then(r => r.text()),
+      fetch("data/nyt_wordlebot_answers.txt").then(requireOk).then(r => r.text()),
+      fetch("data/nyt_accepted_guesses.txt").then(requireOk).then(r => r.text()),
       fetch("data/optimal_strategy.txt").then(requireOk).then(r => r.text()),
       fetch("data/method_comparisons.json").then(requireOk).then(r => r.json()),
+      fetch("data/dictionary_openings.json").then(requireOk).then(r => r.json()),
     ]);
-    answers = answerText.trim().split(/\s+/).map(w => w.toLowerCase());
-    answerSet = new Set(answers);
+    const originalAnswers = answerText.trim().split(/\s+/).map(w => w.toLowerCase());
+    const nytAnswers = nytAnswerText.trim().split(/\s+/).map(w => w.toLowerCase());
+    acceptedGuesses = guessText.trim().split(/\s+/).map(w => w.toLowerCase());
+    dictionaries = { original: originalAnswers, nyt: nytAnswers, broad: acceptedGuesses };
     policy = parseOptimalTree(treeText);
     methodComparisons = comparisonData;
+    dictionaryOpenings = openingData;
     restoreState();
     els.loading.hidden = true;
     showStartMenu();
@@ -105,6 +143,7 @@ function bindEvents() {
   els.startNew.addEventListener("click", startNewGame);
   els.continueGame.addEventListener("click", continueSavedGame);
   els.resumeExisting.addEventListener("click", startExistingPuzzle);
+  els.dictionaryChoice.addEventListener("change", selectDictionary);
   els.showStats.addEventListener("click", showStrategyStats);
   els.statsBack.addEventListener("click", showStartMenu);
   els.compareWord.addEventListener("click", compareKnownWord);
@@ -152,6 +191,35 @@ function feedbackFor(guess, answer) {
   return marks;
 }
 
+function feedbackCode(guess, answer) {
+  let greenMask = 0;
+  for (let index = 0; index < 5; index++) {
+    if (guess[index] === answer[index]) greenMask |= 1 << index;
+  }
+  let yellowMask = 0, code = 0, factor = 1;
+  for (let index = 0; index < 5; index++) {
+    let mark = 0;
+    if (greenMask & (1 << index)) {
+      mark = 2;
+    } else {
+      let available = 0, alreadyUsed = 0;
+      for (let answerIndex = 0; answerIndex < 5; answerIndex++) {
+        if (!(greenMask & (1 << answerIndex)) && answer[answerIndex] === guess[index]) available++;
+      }
+      for (let earlier = 0; earlier < index; earlier++) {
+        if ((yellowMask & (1 << earlier)) && guess[earlier] === guess[index]) alreadyUsed++;
+      }
+      if (alreadyUsed < available) {
+        mark = 1;
+        yellowMask |= 1 << index;
+      }
+    }
+    code += mark * factor;
+    factor *= 3;
+  }
+  return code;
+}
+
 function markKey(marks) { return marks.map(mark => MARK_CHARS[mark]).join(""); }
 
 function currentCandidates() {
@@ -166,11 +234,18 @@ function recommendation(candidates) {
       // Avoid blocking the first mobile paint with hundreds of thousands of
       // feedback calculations. These are the verified Level 5 opening ranks.
       const alternatives = state.history.length === 0
-        ? ["raise", "slate", "crate", "irate", "trace"]
+        ? ROOT_ALTERNATIVES.original
         : rankedLevel5(candidates, 6).filter(w => w !== exact).slice(0, 5);
       return { primary: exact, alternatives, exact: true };
     }
     state.optimal = false;
+  }
+  if (state.history.length === 0) {
+    return { primary: "salet", alternatives: ROOT_ALTERNATIVES[state.dictionary], exact: false };
+  }
+  if (state.history.length === 1 && state.history[0].guess === "salet") {
+    const ranked = dictionaryOpenings[state.dictionary]?.[state.history[0].feedback];
+    if (ranked) return { primary: ranked[0], alternatives: ranked.slice(1, 6), exact: false };
   }
   const ranked = rankedLevel5(candidates, 6);
   return { primary: ranked[0], alternatives: ranked.slice(1, 6), exact: false };
@@ -178,12 +253,20 @@ function recommendation(candidates) {
 
 function rankedLevel5(candidates, limit) {
   if (candidates.length === 1) return [candidates[0]];
-  const pool = candidates.length > 500 ? heuristicPool(candidates, 300) : answers;
+  let pool;
+  if (state.dictionary === "original") {
+    pool = candidates.length > 500
+      ? heuristicPool(candidates, 300, dictionaries.original)
+      : dictionaries.original;
+  } else {
+    const shortlisted = heuristicPool(candidates, 40, acceptedGuesses);
+    pool = candidates.length <= 60 ? [...new Set([...shortlisted, ...candidates])] : shortlisted;
+  }
   const candidateSet = new Set(candidates);
   const scored = pool.map(word => {
     const groups = new Map();
     for (const answer of candidates) {
-      const key = markKey(feedbackFor(word, answer));
+      const key = feedbackCode(word, answer);
       groups.set(key, (groups.get(key) || 0) + 1);
     }
     let entropy = 0, expected = 0, worst = 0;
@@ -199,7 +282,7 @@ function rankedLevel5(candidates, limit) {
   return scored.slice(0, limit).map(item => item.word);
 }
 
-function heuristicPool(candidates, limit) {
+function heuristicPool(candidates, limit, source) {
   const letters = new Map(), positions = new Map();
   for (const word of candidates) {
     for (const letter of new Set(word)) letters.set(letter, (letters.get(letter) || 0) + 1);
@@ -208,7 +291,7 @@ function heuristicPool(candidates, limit) {
       positions.set(key, (positions.get(key) || 0) + 1);
     }
   }
-  return answers.map(word => {
+  return source.map(word => {
     let score = 0;
     for (const letter of new Set(word)) score += letters.get(letter) || 0;
     for (let i = 0; i < 5; i++) score += .35 * (positions.get(`${i}${word[i]}`) || 0);
@@ -221,6 +304,7 @@ function render() {
   const candidates = currentCandidates();
   els.candidateCount.textContent = candidates.length.toLocaleString();
   els.candidateLabel.textContent = candidates.length === 1 ? "possible answer" : "possible answers";
+  els.activeDictionary.textContent = DICTIONARY_META[state.dictionary].label;
   renderHistory();
   els.undo.disabled = state.history.length === 0;
 
@@ -320,6 +404,7 @@ function undoGuess() {
 }
 
 function historyFollowsPolicy(history) {
+  if (state.dictionary !== "original") return false;
   const feedbacks = [];
   for (const item of history) {
     if (policy.get(feedbacks.join("|")) !== item.guess) return false;
@@ -335,13 +420,32 @@ function showStartMenu() {
   els.game.hidden = true;
   els.stats.hidden = true;
   els.startMenu.hidden = false;
+  els.dictionaryChoice.value = selectedDictionary;
+  updateDictionaryCopy();
   const hasSavedGame = state.history.length > 0 || Boolean(state.selectedGuess);
   els.continueGame.disabled = !hasSavedGame;
   els.continueDescription.textContent = hasSavedGame
-    ? `Continue after ${state.history.length} completed guess${state.history.length === 1 ? "" : "es"}.`
+    ? `Continue after ${state.history.length} completed guess${state.history.length === 1 ? "" : "es"} with ${DICTIONARY_META[state.dictionary].label}.`
     : "No saved puzzle yet.";
 }
+function selectDictionary() {
+  selectedDictionary = els.dictionaryChoice.value;
+  localStorage.setItem(DICTIONARY_KEY, selectedDictionary);
+  updateDictionaryCopy();
+}
+function updateDictionaryCopy() {
+  const meta = DICTIONARY_META[selectedDictionary];
+  els.dictionaryDescription.textContent = meta.description;
+  els.startNewDescription.textContent = meta.start;
+}
+function applyDictionary(dictionary) {
+  const active = dictionaries[dictionary] ? dictionary : "nyt";
+  state.dictionary = active;
+  answers = dictionaries[active];
+  if (active !== "original") state.optimal = false;
+}
 function openGame() {
+  applyDictionary(state.dictionary);
   els.startMenu.hidden = true;
   els.stats.hidden = true;
   els.game.hidden = false;
@@ -413,26 +517,35 @@ function compareKnownWord() {
 }
 function startNewGame() {
   if ((state.history.length || state.selectedGuess) && !window.confirm("Erase the saved puzzle and start over?")) return;
-  state = freshState();
+  state = freshState(selectedDictionary);
   saveState();
   openGame();
 }
 function continueSavedGame() { openGame(); }
 function startExistingPuzzle() {
   if ((state.history.length || state.selectedGuess) && !window.confirm("Erase the saved puzzle and enter a different one?")) return;
-  state = freshState();
+  state = freshState(selectedDictionary);
   saveState();
   openGame();
   showMessage("Enter the first word you already played, then match its tile colors.");
   els.customWord.focus();
 }
-function resetGame() { state = freshState(); saveState(); openGame(); }
+function resetGame() {
+  const dictionary = state.dictionary;
+  state = freshState(dictionary);
+  saveState(); openGame();
+}
 function showMessage(text) { els.message.textContent = text; }
 function clearMessage() { els.message.textContent = ""; }
 function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 function restoreState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (saved && Array.isArray(saved.history)) state = { ...freshState(), ...saved };
+    if (saved && Array.isArray(saved.history)) {
+      const dictionary = DICTIONARY_META[saved.dictionary] ? saved.dictionary : "original";
+      state = { ...freshState(dictionary), ...saved, dictionary };
+    } else {
+      state = freshState(selectedDictionary);
+    }
   } catch { localStorage.removeItem(STORAGE_KEY); }
 }
