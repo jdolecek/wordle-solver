@@ -13,6 +13,9 @@ the player used the solver's #1 choice. Players can choose the
 modern 3,209-word NYT WordleBot answer list, the original 2,315-word list, or a
 broad 14,855-word accepted-guess list. Only the original dictionary uses the
 exact Level 12 tree; expanded dictionaries use the flexible Level 5 strategy.
+New puzzles default to `SALET`, but the NYT and broad dictionaries let the
+player choose any accepted five-letter opening word. The original dictionary
+keeps `SALET` locked because its exact Level 12 proof applies to that tree.
 The comparison mode accepts a known original-list answer and shows the exact
 score and guess path for Levels 5, 10, 11, and 12.
 

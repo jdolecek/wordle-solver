@@ -2,6 +2,7 @@ const MARKS = ["gray", "yellow", "green"];
 const MARK_CHARS = ["B", "Y", "G"];
 const STORAGE_KEY = "wordle-solver-game-v1";
 const DICTIONARY_KEY = "wordle-solver-dictionary-v1";
+const START_WORD_KEY = "level-12-start-word-v1";
 const DICTIONARY_META = {
   nyt: {
     label: "NYT 3,209",
@@ -39,11 +40,13 @@ let policy = new Map();
 let methodComparisons = {};
 let dictionaryOpenings = {};
 let selectedDictionary = "nyt";
+let selectedStartWord = "salet";
 let state = freshState();
 
-function freshState(dictionary = selectedDictionary) {
+function freshState(dictionary = selectedDictionary, startWord = selectedStartWord) {
+  const opener = dictionary === "original" ? "salet" : startWord;
   return {
-    dictionary, history: [], optimal: dictionary === "original", selectedGuess: null,
+    dictionary, startWord: opener, history: [], optimal: dictionary === "original", selectedGuess: null,
     selectedRecommendation: null, feedback: [0, 0, 0, 0, 0],
   };
 }
@@ -58,6 +61,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     continueDescription: document.getElementById("continue-description"),
     dictionaryChoice: document.getElementById("dictionary-choice"),
     dictionaryDescription: document.getElementById("dictionary-description"),
+    startWord: document.getElementById("start-word"),
+    startWordNote: document.getElementById("start-word-note"),
     startNewDescription: document.getElementById("start-new-description"),
     resumeExisting: document.getElementById("resume-existing"),
     showStats: document.getElementById("show-stats"),
@@ -100,6 +105,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   try {
     selectedDictionary = localStorage.getItem(DICTIONARY_KEY) || "nyt";
     if (!DICTIONARY_META[selectedDictionary]) selectedDictionary = "nyt";
+    selectedStartWord = (localStorage.getItem(START_WORD_KEY) || "salet").toLowerCase();
+    if (!/^[a-z]{5}$/.test(selectedStartWord)) selectedStartWord = "salet";
     const [answerText, nytAnswerText, guessText, treeText, comparisonData, openingData] = await Promise.all([
       fetch("data/solutions.txt").then(requireOk).then(r => r.text()),
       fetch("data/nyt_wordlebot_answers.txt").then(requireOk).then(r => r.text()),
@@ -151,6 +158,8 @@ function bindEvents() {
   els.continueGame.addEventListener("click", continueSavedGame);
   els.resumeExisting.addEventListener("click", startExistingPuzzle);
   els.dictionaryChoice.addEventListener("change", selectDictionary);
+  els.startWord.addEventListener("input", editStartWord);
+  els.startWord.addEventListener("blur", validateStartWord);
   els.showStats.addEventListener("click", showStrategyStats);
   els.statsBack.addEventListener("click", showStartMenu);
   els.compareWord.addEventListener("click", compareKnownWord);
@@ -248,7 +257,11 @@ function recommendation(candidates) {
     state.optimal = false;
   }
   if (state.history.length === 0) {
-    return { primary: "salet", alternatives: ROOT_ALTERNATIVES[state.dictionary], exact: false };
+    const opener = state.startWord || "salet";
+    const alternatives = ["salet", ...ROOT_ALTERNATIVES[state.dictionary]]
+      .filter((word, index, words) => word !== opener && words.indexOf(word) === index)
+      .slice(0, 5);
+    return { primary: opener, alternatives, exact: false };
   }
   if (state.history.length === 1 && state.history[0].guess === "salet") {
     const ranked = dictionaryOpenings[state.dictionary]?.[state.history[0].feedback];
@@ -466,14 +479,59 @@ function selectDictionary() {
   localStorage.setItem(DICTIONARY_KEY, selectedDictionary);
   updateDictionaryCopy();
 }
+function editStartWord() {
+  els.startWord.value = els.startWord.value.replace(/[^a-z]/gi, "").slice(0, 5).toUpperCase();
+  els.startWordNote.classList.remove("input-error");
+  if (els.startWord.value.length === 5) validateStartWord();
+}
+function validateStartWord() {
+  if (selectedDictionary === "original") return "salet";
+  const word = els.startWord.value.trim().toLowerCase();
+  if (!/^[a-z]{5}$/.test(word)) {
+    els.startWordNote.textContent = "Enter exactly five letters.";
+    els.startWordNote.classList.add("input-error");
+    return null;
+  }
+  if (!acceptedGuesses.includes(word)) {
+    els.startWordNote.textContent = "That word is not in Wordle's accepted guess list.";
+    els.startWordNote.classList.add("input-error");
+    return null;
+  }
+  selectedStartWord = word;
+  localStorage.setItem(START_WORD_KEY, selectedStartWord);
+  els.startWordNote.textContent = word === "salet"
+    ? "SALET is the recommended default, or enter any accepted five-letter word."
+    : `${word.toUpperCase()} will be the solver's first recommendation.`;
+  els.startWordNote.classList.remove("input-error");
+  updateStartDescription(word);
+  return word;
+}
 function updateDictionaryCopy() {
   const meta = DICTIONARY_META[selectedDictionary];
   els.dictionaryDescription.textContent = meta.description;
-  els.startNewDescription.textContent = meta.start;
+  const exact = selectedDictionary === "original";
+  els.startWord.disabled = exact;
+  els.startWord.value = (exact ? "salet" : selectedStartWord).toUpperCase();
+  els.startWordNote.textContent = exact
+    ? "The exact Level 12 strategy is proven specifically for SALET."
+    : selectedStartWord === "salet"
+      ? "SALET is the recommended default, or enter any accepted five-letter word."
+      : `${selectedStartWord.toUpperCase()} will be the solver's first recommendation.`;
+  els.startWordNote.classList.remove("input-error");
+  updateStartDescription(exact ? "salet" : selectedStartWord);
+}
+function updateStartDescription(word) {
+  if (selectedDictionary === "original") {
+    els.startNewDescription.textContent = DICTIONARY_META.original.start;
+    return;
+  }
+  const coverage = selectedDictionary === "nyt" ? "3,209 modern likely answers" : "every accepted word as a possible answer";
+  els.startNewDescription.textContent = `Begin with ${word.toUpperCase()} using ${coverage}.`;
 }
 function applyDictionary(dictionary) {
   const active = dictionaries[dictionary] ? dictionary : "nyt";
   state.dictionary = active;
+  if (active === "original") state.startWord = "salet";
   answers = dictionaries[active];
   if (active !== "original") state.optimal = false;
 }
@@ -549,15 +607,18 @@ function compareKnownWord() {
   els.comparisonResults.hidden = false;
 }
 function startNewGame() {
+  const startWord = validateStartWord();
+  if (!startWord) { els.startWord.focus(); return; }
   if ((state.history.length || state.selectedGuess) && !window.confirm("Erase the saved puzzle and start over?")) return;
-  state = freshState(selectedDictionary);
+  state = freshState(selectedDictionary, startWord);
   saveState();
   openGame();
 }
 function continueSavedGame() { openGame(); }
 function startExistingPuzzle() {
   if ((state.history.length || state.selectedGuess) && !window.confirm("Erase the saved puzzle and enter a different one?")) return;
-  state = freshState(selectedDictionary);
+  const startWord = selectedDictionary === "original" ? "salet" : selectedStartWord;
+  state = freshState(selectedDictionary, startWord);
   saveState();
   openGame();
   showMessage("Enter the first word you already played, then match its tile colors.");
@@ -565,7 +626,8 @@ function startExistingPuzzle() {
 }
 function resetGame() {
   const dictionary = state.dictionary;
-  state = freshState(dictionary);
+  const startWord = state.startWord || "salet";
+  state = freshState(dictionary, startWord);
   saveState(); openGame();
 }
 function showMessage(text) { els.message.textContent = text; }
@@ -576,7 +638,8 @@ function restoreState() {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (saved && Array.isArray(saved.history)) {
       const dictionary = DICTIONARY_META[saved.dictionary] ? saved.dictionary : "original";
-      state = { ...freshState(dictionary), ...saved, dictionary };
+      const startWord = dictionary === "original" ? "salet" : saved.startWord || "salet";
+      state = { ...freshState(dictionary, startWord), ...saved, dictionary, startWord };
     } else {
       state = freshState(selectedDictionary);
     }

@@ -1,4 +1,4 @@
-const CACHE = "level-12-v9";
+const CACHE = "level-12-v10";
 const ASSETS = [
   "./", "index.html", "styles.css", "app.js", "manifest.webmanifest",
   "icons/icon.svg", "icons/level-12-logo.svg",
