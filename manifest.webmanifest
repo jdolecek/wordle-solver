@@ -1,7 +1,7 @@
 {
   "name": "Wordle Solver",
   "short_name": "Solver",
-  "description": "A mobile Wordle assistant using a provably optimal strategy.",
+  "description": "A mobile Wordle assistant with selectable answer dictionaries.",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#121213",

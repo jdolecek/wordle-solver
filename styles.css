@@ -25,7 +25,7 @@ body {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 button { touch-action: manipulation; }
 
 .app-shell {
@@ -73,6 +73,7 @@ h2 { margin-bottom: .7rem; font-size: 1.25rem; }
 }
 
 .summary strong { color: var(--text); font-size: 1.65rem; }
+.dictionary-badge { margin-left: auto; padding: .25rem .45rem; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: .65rem; }
 
 .panel {
   margin-top: .75rem;
@@ -92,6 +93,10 @@ h2 { margin-bottom: .7rem; font-size: 1.25rem; }
 .welcome-copy { padding: 0 .25rem .35rem; }
 .welcome-copy h2 { margin-bottom: .4rem; font-size: 1.55rem; }
 .welcome-copy > p:last-child { color: var(--muted); }
+.dictionary-picker { margin: 0 0 .75rem; box-shadow: none; }
+.dictionary-picker label { display: block; margin-bottom: .45rem; color: var(--accent); font-size: .72rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.dictionary-picker select { width: 100%; padding: .7rem; border: 1px solid var(--border); border-radius: .7rem; background: #141416; color: var(--text); font-weight: 700; }
+.dictionary-picker p { margin: .55rem 0 0; color: var(--muted); font-size: .78rem; line-height: 1.4; }
 .mode-list { display: grid; gap: .65rem; }
 .mode-button {
   display: grid;
