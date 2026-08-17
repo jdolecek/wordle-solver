@@ -25,6 +25,38 @@
       <p>Loading the optimal strategy…</p>
     </section>
 
+    <section id="start-menu" class="start-menu" hidden>
+      <div class="welcome-copy">
+        <p class="eyebrow">CHOOSE A MODE</p>
+        <h2>How are you playing?</h2>
+        <p>Pick the option that matches where you are in today's puzzle.</p>
+      </div>
+
+      <div class="mode-list">
+        <button id="start-new" class="mode-button primary-mode" type="button">
+          <span class="mode-icon">▶</span>
+          <span><strong>Start a new puzzle</strong><small>Begin with SALET and follow the optimal strategy.</small></span>
+        </button>
+        <button id="continue-game" class="mode-button" type="button">
+          <span class="mode-icon">↗</span>
+          <span><strong>Continue saved puzzle</strong><small id="continue-description">Return to your last guess.</small></span>
+        </button>
+        <button id="resume-existing" class="mode-button" type="button">
+          <span class="mode-icon">＋</span>
+          <span><strong>I've already started</strong><small>Enter a word you played, then tap in its colors.</small></span>
+        </button>
+      </div>
+
+      <div class="how-it-works panel">
+        <p class="eyebrow">HOW IT WORKS</p>
+        <ol>
+          <li>Choose the solver's #1 word or enter your own.</li>
+          <li>Play that word in Wordle.</li>
+          <li>Tap the five tiles here to match Wordle's colors.</li>
+        </ol>
+      </div>
+    </section>
+
     <div id="game" hidden>
       <section class="summary" aria-live="polite">
         <strong id="candidate-count">2,315</strong>
@@ -69,6 +101,7 @@
 
       <footer>
         <button id="undo" class="text-button" type="button" disabled>Undo last guess</button>
+        <button id="back-to-menu" class="text-button" type="button">Modes</button>
         <span>Runs locally in Chrome</span>
       </footer>
     </div>

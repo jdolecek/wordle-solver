@@ -15,7 +15,12 @@ function freshState() {
 window.addEventListener("DOMContentLoaded", async () => {
   Object.assign(els, {
     loading: document.getElementById("loading"),
+    startMenu: document.getElementById("start-menu"),
     game: document.getElementById("game"),
+    startNew: document.getElementById("start-new"),
+    continueGame: document.getElementById("continue-game"),
+    continueDescription: document.getElementById("continue-description"),
+    resumeExisting: document.getElementById("resume-existing"),
     candidateCount: document.getElementById("candidate-count"),
     candidateLabel: document.getElementById("candidate-label"),
     history: document.getElementById("history"),
@@ -35,6 +40,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     undo: document.getElementById("undo"),
     newGame: document.getElementById("new-game"),
     playAgain: document.getElementById("play-again"),
+    backToMenu: document.getElementById("back-to-menu"),
   });
   bindEvents();
   try {
@@ -47,8 +53,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     policy = parseOptimalTree(treeText);
     restoreState();
     els.loading.hidden = true;
-    els.game.hidden = false;
-    render();
+    showStartMenu();
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js");
   } catch (error) {
     els.loading.innerHTML = `<p>Could not load the solver. Check your connection and refresh.</p>`;
@@ -75,6 +80,10 @@ function bindEvents() {
   els.undo.addEventListener("click", undoGuess);
   els.newGame.addEventListener("click", confirmNewGame);
   els.playAgain.addEventListener("click", resetGame);
+  els.startNew.addEventListener("click", startNewGame);
+  els.continueGame.addEventListener("click", continueSavedGame);
+  els.resumeExisting.addEventListener("click", startExistingPuzzle);
+  els.backToMenu.addEventListener("click", showStartMenu);
 }
 
 function parseOptimalTree(text) {
@@ -290,10 +299,38 @@ function historyFollowsPolicy(history) {
 }
 
 function confirmNewGame() {
-  if (!state.history.length && !state.selectedGuess) return;
-  if (window.confirm("Start a new puzzle and erase this history?")) resetGame();
+  showStartMenu();
 }
-function resetGame() { state = freshState(); saveState(); render(); }
+function showStartMenu() {
+  els.game.hidden = true;
+  els.startMenu.hidden = false;
+  const hasSavedGame = state.history.length > 0 || Boolean(state.selectedGuess);
+  els.continueGame.disabled = !hasSavedGame;
+  els.continueDescription.textContent = hasSavedGame
+    ? `Continue after ${state.history.length} completed guess${state.history.length === 1 ? "" : "es"}.`
+    : "No saved puzzle yet.";
+}
+function openGame() {
+  els.startMenu.hidden = true;
+  els.game.hidden = false;
+  render();
+}
+function startNewGame() {
+  if ((state.history.length || state.selectedGuess) && !window.confirm("Erase the saved puzzle and start over?")) return;
+  state = freshState();
+  saveState();
+  openGame();
+}
+function continueSavedGame() { openGame(); }
+function startExistingPuzzle() {
+  if ((state.history.length || state.selectedGuess) && !window.confirm("Erase the saved puzzle and enter a different one?")) return;
+  state = freshState();
+  saveState();
+  openGame();
+  showMessage("Enter the first word you already played, then match its tile colors.");
+  els.customWord.focus();
+}
+function resetGame() { state = freshState(); saveState(); openGame(); }
 function showMessage(text) { els.message.textContent = text; }
 function clearMessage() { els.message.textContent = ""; }
 function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
