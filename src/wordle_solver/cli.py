@@ -11,6 +11,8 @@ from pathlib import Path
 
 from .core import Feedback, WordleSolver, feedback_for
 
+STANDARD_OPENING = "salet"
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Explainable information-theoretic Wordle solver")
@@ -173,7 +175,7 @@ def run_interactive(
         print(f"\nPuzzle already solved with {history[-1][0].upper()}.")
         return
 
-    opening_guess = solver.rank_guesses(solver.answers, limit=1)[0].word
+    opening_guess = STANDARD_OPENING
     print("Wordle solver. Enter feedback as g/y/b (green/yellow/gray). Type quit to exit.")
     if not history:
         print(f"Opening guess: {opening_guess.upper()}")
@@ -185,19 +187,21 @@ def run_interactive(
         if not candidates:
             print("No candidates remain. Check the spelling and feedback history.")
         else:
-            print("Top potential matches:")
-            print("  " + ", ".join(solver.top_matches(candidates)))
-            print("Best information guesses:")
-            for score in solver.rank_guesses(candidates):
+            ranked = solver.rank_guesses(candidates)
+            print("Level 5 ranked guesses:")
+            for rank, score in enumerate(ranked, start=1):
                 print(
-                    f"  {score.word}: {score.entropy:.2f} bits, "
+                    f"  {rank}. {score.word}: {score.entropy:.2f} bits, "
                     f"about {score.expected_remaining:.1f} remain, "
                     f"worst case {score.worst_case}"
                 )
 
-        guess = solver.rank_guesses(candidates, limit=1)[0].word if candidates else ""
+        recommended = ranked[0].word if candidates else ""
         if not history:
-            guess = opening_guess
+            recommended = opening_guess
+        guess = choose_live_guess(recommended)
+        if guess is None:
+            return
         result_text = input(f"\nEnter result for {guess.upper()} (g/y/b), or quit: ").strip().lower()
         if result_text in {"quit", "q", "exit"}:
             return
@@ -206,6 +210,21 @@ def run_interactive(
             history.append((guess, result))
         except ValueError as error:
             print(f"Input error: {error}", file=sys.stderr)
+
+
+def choose_live_guess(recommended: str) -> str | None:
+    """Let the player accept a recommendation or enter their own guess."""
+    while True:
+        value = input(
+            f"Use {recommended.upper()}? Press Enter to accept, or type your own word: "
+        ).strip().lower()
+        if value in {"quit", "q", "exit"}:
+            return None
+        if not value:
+            return recommended
+        if len(value) == 5 and value.isalpha():
+            return value
+        print("Input error: guess must be exactly five letters.", file=sys.stderr)
 
 
 def optimal_history_supported(history: list[tuple[str, Feedback]]) -> bool:
@@ -233,11 +252,17 @@ def run_optimal_interactive(
             print(f"Puzzle solved with {history[-1][0].upper()}.")
             return
         feedback_history = tuple(format_feedback(result).upper() for _, result in history)
-        guess = policy[feedback_history]
+        recommended = policy[feedback_history]
         print(f"\n{len(candidates)} possible answers remain.")
-        print("Top potential matches:")
-        print("  " + ", ".join(solver.top_matches(candidates)))
-        print(f"Optimal next guess: {guess.upper()}")
+        alternatives = ranked_live_alternatives(solver, candidates, recommended)
+        print("Level 12 recommendation and best override options:")
+        print(f"  1. {recommended.upper()} (provably optimal for this state)")
+        for rank, word in enumerate(alternatives, start=2):
+            print(f"  {rank}. {word.upper()} (Level 5 information ranking)")
+        guess = choose_live_guess(recommended)
+        if guess is None:
+            return
+        overridden = guess != recommended
         result_text = input(f"Enter result for {guess.upper()} (g/y/b), or quit: ").strip().lower()
         if result_text in {"quit", "q", "exit"}:
             return
@@ -248,8 +273,23 @@ def run_optimal_interactive(
                 print("Input error: that feedback leaves no possible answers.", file=sys.stderr)
                 continue
             history = proposed
+            if overridden and result != (2, 2, 2, 2, 2):
+                print(
+                    "\nOverride accepted. The exact Level 12 path no longer applies; "
+                    "continuing with the best flexible strategy (Level 5)."
+                )
+                run_interactive(solver, history)
+                return
         except ValueError as error:
             print(f"Input error: {error}", file=sys.stderr)
+
+
+def ranked_live_alternatives(
+    solver: WordleSolver, candidates: list[str], recommended: str, limit: int = 5
+) -> list[str]:
+    """Return strong heuristic overrides, excluding the exact-policy choice."""
+    ranked = solver.rank_guesses(candidates, limit=min(len(solver.guesses), limit + 1))
+    return [score.word for score in ranked if score.word != recommended][:limit]
 
 
 def solve_known_answers(answers: list[str], guesses: list[str]) -> None:
@@ -284,7 +324,7 @@ def solve_known_level(
     candidates = solver.answers
     path: list[tuple[str, Feedback, int]] = []
     attempted: set[str] = set()
-    opening_guess = _ranked_words(solver, candidates, aggressiveness, choice_cache)[0]
+    opening_guess = STANDARD_OPENING
     guess = opening_guess
 
     print(f"\nLevel {aggressiveness} ({_aggressiveness_label(aggressiveness)})")
@@ -436,7 +476,9 @@ def solve_minimax_level(
     print("\nLevel 10 (minimax, Wordle guesses)")
 
     while True:
-        if len(candidates) == 1:
+        if not path:
+            guess = STANDARD_OPENING
+        elif len(candidates) == 1:
             guess = candidates[0]
         else:
             key = ("minimax", tuple(solver.guesses), tuple(candidates), tuple(sorted(attempted)))
@@ -474,7 +516,9 @@ def solve_expected_turns_level(
     print("\nLevel 11 (expected turns, Wordle guesses)")
 
     while True:
-        if len(candidates) == 1:
+        if not path:
+            guess = STANDARD_OPENING
+        elif len(candidates) == 1:
             guess = candidates[0]
         else:
             key = ("expected", tuple(solver.guesses), tuple(candidates), tuple(sorted(attempted)))

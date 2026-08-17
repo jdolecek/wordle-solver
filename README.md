@@ -2,6 +2,32 @@
 
 An interactive Python Wordle solver that explains each recommendation.
 
+## Mobile web app
+
+The `web/` application provides the same optimal solver in a mobile-first
+interface that runs entirely in Chrome. It includes six ranked choices,
+tap-to-color feedback tiles, custom-guess overrides, undo, automatic saved
+progress, and offline support after the first visit.
+
+The production bundle is published from the repository's `gh-pages` branch.
+For this repository the address is:
+
+```text
+https://jdolecek.github.io/wordle-solver/
+```
+
+To test it locally, assemble the static data and serve it over HTTP:
+
+```sh
+mkdir -p /tmp/wordle-solver-web/data
+cp -R web/. /tmp/wordle-solver-web/
+cp data/solutions.txt data/optimal_strategy.txt /tmp/wordle-solver-web/data/
+python3 -m http.server 8000 --directory /tmp/wordle-solver-web
+```
+
+Then open `http://localhost:8000` in Chrome. The app cannot be opened directly
+as a `file://` URL because browsers restrict its data-file requests.
+
 ## How the ranking works
 
 1. **Filter:** each entered guess and color pattern removes every answer whose exact Wordle feedback does not match.
@@ -38,7 +64,13 @@ At startup, choose one of three modes:
 
 - **Play with the solver:** with the bundled answer set, the solver follows the
 	provably optimal Level 12 decision tree. Custom dictionaries fall back to the
-	greedy Level 5 information strategy.
+	greedy Level 5 information strategy. At every turn, press Enter to accept the
+	recommended word or type your own five-letter guess. An override exits the
+	fixed optimal tree and continues with fresh Level 5 recommendations. The live
+	display ranks guesses using the active strategy rather than English-frequency
+	answer likelihood. Level 12 shows its exact choice first, followed by five
+	Level 5 information-ranked override options; only the first choice carries the
+	global optimality guarantee.
 - **Solve a known answer:** enter the answer once; the solver automatically runs
 	all four retained comparison strategies and reports every path and score.
 
@@ -64,6 +96,9 @@ result is globally optimal under a uniform answer probability and the original
 Level 5 uses expected information gain with worst-case partition size as a
 tie-breaker. These are greedy mathematical strategies, not exhaustive proofs
 of the globally shortest path.
+
+All retained strategies use `SALET` as their opening guess, making their
+post-opening decision rules directly comparable.
 
 The solver tells you which guess to enter. After entering it in the online game, provide only its result. Use `g` for green, `y` for yellow, and `b` for gray:
 

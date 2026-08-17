@@ -1,9 +1,11 @@
 from wordle_solver.cli import (
     _best_expected_turns_guess,
+    choose_live_guess,
     collect_existing_history,
     format_feedback,
     load_optimal_policy,
     load_words,
+    ranked_live_alternatives,
 )
 from wordle_solver.core import WordleSolver, feedback_for
 
@@ -93,3 +95,19 @@ def test_bundled_optimal_policy_has_published_score():
     assert len(scores) == 2315
     assert sum(scores) == 7920
     assert max(scores) == 5
+
+
+def test_live_guess_can_accept_or_override_recommendation(monkeypatch):
+    entries = iter(["", "crane"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(entries))
+    assert choose_live_guess("salet") == "salet"
+    assert choose_live_guess("salet") == "crane"
+
+
+def test_live_mode_lists_five_distinct_override_options():
+    answers = ["about", "cigar", "their", "which", "bland", "crane"]
+    solver = WordleSolver(answers, answers, aggressiveness=5)
+    alternatives = ranked_live_alternatives(solver, solver.answers, "salet")
+    assert len(alternatives) == 5
+    assert "salet" not in alternatives
+    assert len(set(alternatives)) == 5
