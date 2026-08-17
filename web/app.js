@@ -6,7 +6,7 @@ const START_WORD_KEY = "level-12-start-word-v1";
 const DICTIONARY_META = {
   nyt: {
     label: "NYT 3,209",
-    description: "Modern likely-answer list maintained from NYT WordleBot. Uses the flexible Level 5 strategy.",
+    description: "Modern NYT coverage with editor-aware deep search. Previously used answers remain available as a safety net.",
     start: "Begin with SALET using 3,209 modern likely answers.",
   },
   original: {
@@ -37,6 +37,7 @@ let dictionaries = {};
 let answers = [];
 let acceptedGuesses = [];
 let policy = new Map();
+let editorPolicy = new Map();
 let methodComparisons = {};
 let dictionaryOpenings = {};
 let selectedDictionary = "nyt";
@@ -46,7 +47,8 @@ let state = freshState();
 function freshState(dictionary = selectedDictionary, startWord = selectedStartWord) {
   const opener = dictionary === "original" ? "salet" : startWord;
   return {
-    dictionary, startWord: opener, history: [], optimal: dictionary === "original", selectedGuess: null,
+    dictionary, startWord: opener, history: [], optimal: dictionary === "original",
+    editorAware: dictionary === "nyt" && opener === "salet", selectedGuess: null,
     selectedRecommendation: null, feedback: [0, 0, 0, 0, 0],
   };
 }
@@ -110,11 +112,12 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (!DICTIONARY_META[selectedDictionary]) selectedDictionary = "nyt";
     selectedStartWord = (localStorage.getItem(START_WORD_KEY) || "salet").toLowerCase();
     if (!/^[a-z]{5}$/.test(selectedStartWord)) selectedStartWord = "salet";
-    const [answerText, nytAnswerText, guessText, treeText, comparisonData, openingData] = await Promise.all([
+    const [answerText, nytAnswerText, guessText, treeText, editorTreeText, comparisonData, openingData] = await Promise.all([
       fetch("data/solutions.txt").then(requireOk).then(r => r.text()),
       fetch("data/nyt_wordlebot_answers.txt").then(requireOk).then(r => r.text()),
       fetch("data/nyt_accepted_guesses.txt").then(requireOk).then(r => r.text()),
       fetch("data/optimal_strategy.txt").then(requireOk).then(r => r.text()),
+      fetch("data/editor_strategy.txt").then(requireOk).then(r => r.text()),
       fetch("data/method_comparisons.json").then(requireOk).then(r => r.json()),
       fetch("data/dictionary_openings.json").then(requireOk).then(r => r.json()),
     ]);
@@ -123,6 +126,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     acceptedGuesses = guessText.trim().split(/\s+/).map(w => w.toLowerCase());
     dictionaries = { original: originalAnswers, nyt: nytAnswers, broad: acceptedGuesses };
     policy = parseOptimalTree(treeText);
+    editorPolicy = parseOptimalTree(editorTreeText);
     methodComparisons = comparisonData;
     dictionaryOpenings = openingData;
     restoreState();
@@ -151,6 +155,7 @@ function bindEvents() {
     state.selectedGuess = null;
     state.selectedRecommendation = null;
     state.optimal = historyFollowsPolicy(state.history);
+    state.editorAware = historyFollowsEditorPolicy(state.history);
     saveState();
     render();
   });
@@ -260,6 +265,17 @@ function recommendation(candidates) {
       return { primary: exact, alternatives, exact: true };
     }
     state.optimal = false;
+  }
+  if (state.editorAware) {
+    const key = state.history.map(item => item.feedback).join("|");
+    const editorChoice = editorPolicy.get(key);
+    if (editorChoice) {
+      const alternatives = state.history.length === 0
+        ? ROOT_ALTERNATIVES.nyt
+        : rankedLevel5(candidates, 6).filter(word => word !== editorChoice).slice(0, 5);
+      return { primary: editorChoice, alternatives, exact: false, editorAware: true };
+    }
+    state.editorAware = false;
   }
   if (state.history.length === 0) {
     const opener = state.startWord || "salet";
@@ -383,12 +399,15 @@ function renderHistory() {
 }
 
 function renderChoices(choice) {
-  els.strategyLabel.textContent = choice.exact ? "PROVABLY OPTIMAL" : "LEVEL 5 · FLEXIBLE";
+  els.strategyLabel.textContent = choice.exact
+    ? "PROVABLY OPTIMAL"
+    : choice.editorAware ? "EDITOR-AWARE · DEEP SEARCH" : "LEVEL 5 · FLEXIBLE";
   const words = [choice.primary, ...choice.alternatives];
   els.choiceList.innerHTML = "";
   words.forEach((word, index) => {
     const button = document.createElement("button"); button.type = "button"; button.className = "choice-button";
-    button.innerHTML = `<span class="choice-rank">${index + 1}</span><span class="choice-word">${word.toUpperCase()}</span><span class="choice-note">${index === 0 && choice.exact ? "exact" : "info"}</span>`;
+    const note = index === 0 && choice.exact ? "exact" : index === 0 && choice.editorAware ? "deep" : "info";
+    button.innerHTML = `<span class="choice-rank">${index + 1}</span><span class="choice-word">${word.toUpperCase()}</span><span class="choice-note">${note}</span>`;
     button.addEventListener("click", () => selectGuess(word, choice.primary));
     els.choiceList.append(button);
   });
@@ -399,6 +418,7 @@ function selectGuess(word, recommended) {
   state.selectedRecommendation = recommended.toLowerCase();
   state.feedback = [0, 0, 0, 0, 0];
   if (word !== recommended) state.optimal = false;
+  if (word !== recommended) state.editorAware = false;
   saveState(); render();
 }
 
@@ -451,6 +471,7 @@ function undoGuess() {
   state.selectedRecommendation = null;
   state.feedback = [0, 0, 0, 0, 0];
   state.optimal = historyFollowsPolicy(state.history);
+  state.editorAware = historyFollowsEditorPolicy(state.history);
   saveState(); render();
 }
 
@@ -462,6 +483,15 @@ function historyFollowsPolicy(history) {
     feedbacks.push(item.feedback);
   }
   return true;
+}
+function historyFollowsEditorPolicy(history) {
+  if (state.dictionary !== "nyt" || state.startWord !== "salet") return false;
+  const feedbacks = [];
+  for (const item of history) {
+    if (editorPolicy.get(feedbacks.join("|")) !== item.guess) return false;
+    feedbacks.push(item.feedback);
+  }
+  return editorPolicy.has(feedbacks.join("|"));
 }
 
 function confirmNewGame() {
@@ -505,8 +535,10 @@ function validateStartWord() {
   }
   selectedStartWord = word;
   localStorage.setItem(START_WORD_KEY, selectedStartWord);
-  els.startWordNote.textContent = word === "salet"
-    ? "SALET is the recommended default, or enter any accepted five-letter word."
+  els.startWordNote.textContent = word === "salet" && selectedDictionary === "nyt"
+    ? "SALET enables the editor-aware deep-search strategy."
+    : word === "salet"
+      ? "SALET is the recommended default, or enter any accepted five-letter word."
     : `${word.toUpperCase()} will be the solver's first recommendation.`;
   els.startWordNote.classList.remove("input-error");
   updateStartDescription(word);
@@ -520,7 +552,9 @@ function updateDictionaryCopy() {
   els.startWord.value = (exact ? "salet" : selectedStartWord).toUpperCase();
   els.startWordNote.textContent = exact
     ? "The exact Level 12 strategy is proven specifically for SALET."
-    : selectedStartWord === "salet"
+    : selectedStartWord === "salet" && selectedDictionary === "nyt"
+      ? "SALET enables the editor-aware deep-search strategy."
+      : selectedStartWord === "salet"
       ? "SALET is the recommended default, or enter any accepted five-letter word."
       : `${selectedStartWord.toUpperCase()} will be the solver's first recommendation.`;
   els.startWordNote.classList.remove("input-error");
@@ -531,6 +565,12 @@ function updateStartDescription(word) {
     els.startNewDescription.textContent = DICTIONARY_META.original.start;
     return;
   }
+  if (selectedDictionary === "nyt") {
+    els.startNewDescription.textContent = word === "salet"
+      ? "Start with SALET and use the editor-aware deep-search strategy."
+      : `Start with ${word.toUpperCase()}, then continue with the flexible strategy.`;
+    return;
+  }
   els.startNewDescription.textContent = "Choose your opening word, then begin with the flexible strategy.";
 }
 function applyDictionary(dictionary) {
@@ -539,6 +579,7 @@ function applyDictionary(dictionary) {
   if (active === "original") state.startWord = "salet";
   answers = dictionaries[active];
   if (active !== "original") state.optimal = false;
+  if (active !== "nyt") state.editorAware = false;
 }
 function openGame() {
   applyDictionary(state.dictionary);
@@ -637,8 +678,7 @@ function showNewGameSetup() {
 function continueSavedGame() { openGame(); }
 function startExistingPuzzle() {
   if ((state.history.length || state.selectedGuess) && !window.confirm("Erase the saved puzzle and enter a different one?")) return;
-  const startWord = selectedDictionary === "original" ? "salet" : selectedStartWord;
-  state = freshState(selectedDictionary, startWord);
+  state = freshState(selectedDictionary, "salet");
   saveState();
   openGame();
   showMessage("Enter the first word you already played, then match its tile colors.");
@@ -660,6 +700,9 @@ function restoreState() {
       const dictionary = DICTIONARY_META[saved.dictionary] ? saved.dictionary : "original";
       const startWord = dictionary === "original" ? "salet" : saved.startWord || "salet";
       state = { ...freshState(dictionary, startWord), ...saved, dictionary, startWord };
+      if (typeof saved.editorAware !== "boolean") {
+        state.editorAware = historyFollowsEditorPolicy(state.history);
+      }
     } else {
       state = freshState(selectedDictionary);
     }

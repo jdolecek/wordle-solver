@@ -12,10 +12,17 @@ visit. Recommendation accuracy is the percentage of recorded turns on which
 the player used the solver's #1 choice. Players can choose the
 modern 3,209-word NYT WordleBot answer list, the original 2,315-word list, or a
 broad 14,855-word accepted-guess list. Only the original dictionary uses the
-exact Level 12 tree; expanded dictionaries use the flexible Level 5 strategy.
+exact Level 12 tree. The default NYT dictionary uses an editor-aware deep-search
+tree that prioritizes unused answers and the early-answer pool NYT has recently
+drawn repeats from, while retaining all 3,209 candidates as a safety net. Broad
+mode uses the flexible Level 5 strategy.
 New puzzles default to `SALET`, but the NYT and broad dictionaries let the
 player choose any accepted five-letter opening word. The original dictionary
 keeps `SALET` locked because its exact Level 12 proof applies to that tree.
+With `SALET`, the editor-aware model averages 3.26 guesses across its current
+1,319-word primary set. In a frozen test made before puzzles 1,689–1,880, it
+averaged 3.33 on those 192 subsequent real answers. A custom opening leaves the
+fixed deep-search tree and uses the flexible strategy.
 The comparison mode accepts a known original-list answer and shows the exact
 score and guess path for Levels 5, 10, 11, and 12.
 

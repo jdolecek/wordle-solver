@@ -31,6 +31,18 @@ revision `8aeba014054e9193f547e7b992f2f06662e79289`. Regenerate them with
 `scripts/import_wordgamesbot_dictionaries.py`. They change over time and do not
 carry the original dictionary's Level 12 optimality guarantee.
 
+`nyt_editor_answers.txt` is the 1,319-word primary set for the editor-aware
+mobile strategy as of 2026-08-17. It combines not-yet-used words from the
+filtered NYT WordleBot answer set with the first 201 original answers, which
+model the pool from which NYT drew 20 of its first 21 repeated answers.
+Past-answer status came from TechRadar's dated answer archive and was brought
+current through 2026-08-17 with NYT's public Wordle JSON endpoint.
+`editor_strategy.txt` is the corresponding SALET strategy tree. It was generated
+with Alex Selby's MIT-licensed `wordle` search program using `-n25`; its total
+score is 4,303 guesses, or 3.26232 across the primary set. The mobile app keeps
+the larger 3,209-word list active and falls back to flexible search whenever
+feedback leaves this tree, so an editorial surprise is not rejected.
+
 After updating either expanded dictionary, run
 `scripts/build_dictionary_openings.py` to refresh the mobile app's precomputed
 second-turn rankings.
