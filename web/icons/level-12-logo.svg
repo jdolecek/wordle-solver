@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 590 116" role="img" aria-labelledby="title desc">
+  <title id="title">Level 12</title>
+  <desc id="desc">LEVEL spelled with Wordle-style tiles followed by the number 12</desc>
+  <g font-family="Arial, Helvetica, sans-serif" font-weight="800" text-anchor="middle">
+    <rect x="2" y="2" width="104" height="104" rx="12" fill="#3a3a3c" stroke="#565758" stroke-width="4"/>
+    <rect x="116" y="2" width="104" height="104" rx="12" fill="#b59f3b"/>
+    <rect x="230" y="2" width="104" height="104" rx="12" fill="#538d4e"/>
+    <rect x="344" y="2" width="104" height="104" rx="12" fill="#538d4e"/>
+    <rect x="458" y="2" width="104" height="104" rx="12" fill="#538d4e"/>
+    <g fill="#fff" font-size="67">
+      <text x="54" y="78">L</text>
+      <text x="168" y="78">E</text>
+      <text x="282" y="78">V</text>
+      <text x="396" y="78">E</text>
+      <text x="510" y="78">L</text>
+    </g>
+    <rect x="529" y="67" width="59" height="47" rx="10" fill="#121213" stroke="#f8f8f8" stroke-width="3"/>
+    <text x="558.5" y="101" fill="#f8f8f8" font-size="29">12</text>
+  </g>
+</svg>

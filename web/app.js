@@ -42,7 +42,10 @@ let selectedDictionary = "nyt";
 let state = freshState();
 
 function freshState(dictionary = selectedDictionary) {
-  return { dictionary, history: [], optimal: dictionary === "original", selectedGuess: null, feedback: [0, 0, 0, 0, 0] };
+  return {
+    dictionary, history: [], optimal: dictionary === "original", selectedGuess: null,
+    selectedRecommendation: null, feedback: [0, 0, 0, 0, 0],
+  };
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
@@ -84,6 +87,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     changeGuess: document.getElementById("change-guess"),
     solvedPanel: document.getElementById("solved-panel"),
     solvedTitle: document.getElementById("solved-title"),
+    accuracyScore: document.getElementById("accuracy-score"),
+    accuracyDetail: document.getElementById("accuracy-detail"),
+    accuracyBar: document.getElementById("accuracy-bar"),
     message: document.getElementById("message"),
     undo: document.getElementById("undo"),
     newGame: document.getElementById("new-game"),
@@ -133,6 +139,7 @@ function bindEvents() {
   els.submitFeedback.addEventListener("click", submitFeedback);
   els.changeGuess.addEventListener("click", () => {
     state.selectedGuess = null;
+    state.selectedRecommendation = null;
     state.optimal = historyFollowsPolicy(state.history);
     saveState();
     render();
@@ -302,18 +309,24 @@ function heuristicPool(candidates, limit, source) {
 function render() {
   clearMessage();
   const candidates = currentCandidates();
-  els.candidateCount.textContent = candidates.length.toLocaleString();
-  els.candidateLabel.textContent = candidates.length === 1 ? "possible answer" : "possible answers";
+  const solved = state.history.at(-1)?.feedback === "GGGGG";
+  els.candidateCount.textContent = solved
+    ? state.history.at(-1).guess.toUpperCase()
+    : candidates.length.toLocaleString();
+  els.candidateLabel.textContent = solved
+    ? "solved answer"
+    : candidates.length === 1 ? "possible answer" : "possible answers";
   els.activeDictionary.textContent = DICTIONARY_META[state.dictionary].label;
   renderHistory();
   els.undo.disabled = state.history.length === 0;
 
-  const solved = state.history.at(-1)?.feedback === "GGGGG";
   els.solvedPanel.hidden = !solved;
   els.recommendations.hidden = solved || Boolean(state.selectedGuess);
   els.feedbackPanel.hidden = solved || !state.selectedGuess;
   if (solved) {
     els.solvedTitle.textContent = `Solved in ${state.history.length} guess${state.history.length === 1 ? "" : "es"}!`;
+    renderAccuracy();
+    saveState();
     return;
   }
   if (!candidates.length) {
@@ -325,6 +338,21 @@ function render() {
   if (state.selectedGuess) renderFeedback();
   else renderChoices(recommendation(candidates));
   saveState();
+}
+
+function renderAccuracy() {
+  const recorded = state.history.filter(item => typeof item.recommended === "string");
+  if (!recorded.length) {
+    els.accuracyScore.textContent = "—";
+    els.accuracyDetail.textContent = "Accuracy tracking begins with your next game.";
+    els.accuracyBar.style.width = "0%";
+    return;
+  }
+  const followed = recorded.filter(item => item.guess === item.recommended).length;
+  const accuracy = Math.round(followed / recorded.length * 100);
+  els.accuracyScore.textContent = `${accuracy}%`;
+  els.accuracyDetail.textContent = `${followed} of ${recorded.length} recorded #1 recommendation${recorded.length === 1 ? "" : "s"} followed`;
+  els.accuracyBar.style.width = `${accuracy}%`;
 }
 
 function renderHistory() {
@@ -350,6 +378,7 @@ function renderChoices(choice) {
 
 function selectGuess(word, recommended) {
   state.selectedGuess = word.toLowerCase();
+  state.selectedRecommendation = recommended.toLowerCase();
   state.feedback = [0, 0, 0, 0, 0];
   if (word !== recommended) state.optimal = false;
   saveState(); render();
@@ -385,11 +414,14 @@ function tile(letter, mark, interactive) {
 
 function submitFeedback() {
   const feedback = markKey(state.feedback);
-  const proposed = [...state.history, { guess: state.selectedGuess, feedback }];
+  const proposed = [...state.history, {
+    guess: state.selectedGuess, feedback, recommended: state.selectedRecommendation,
+  }];
   const remaining = answers.filter(answer => proposed.every(item => markKey(feedbackFor(item.guess, answer)) === item.feedback));
   if (!remaining.length && feedback !== "GGGGG") return showMessage("Those colors conflict with the earlier guesses. Check the tiles and try again.");
   state.history = proposed;
   state.selectedGuess = null;
+  state.selectedRecommendation = null;
   state.feedback = [0, 0, 0, 0, 0];
   saveState(); render();
 }
@@ -398,6 +430,7 @@ function undoGuess() {
   if (!state.history.length) return;
   state.history.pop();
   state.selectedGuess = null;
+  state.selectedRecommendation = null;
   state.feedback = [0, 0, 0, 0, 0];
   state.optimal = historyFollowsPolicy(state.history);
   saveState(); render();

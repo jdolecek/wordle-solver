@@ -1,6 +1,6 @@
 {
-  "name": "Wordle Solver",
-  "short_name": "Solver",
+  "name": "Level 12 · Wordle Solver",
+  "short_name": "Level 12",
   "description": "A mobile Wordle assistant with selectable answer dictionaries.",
   "start_url": "./",
   "display": "standalone",

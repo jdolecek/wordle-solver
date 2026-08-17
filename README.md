@@ -5,9 +5,11 @@ An interactive Python Wordle solver that explains each recommendation.
 ## Mobile web app
 
 The `web/` application provides the same optimal solver in a mobile-first
-interface that runs entirely in Chrome. It includes six ranked choices,
+interface branded as **Level 12** that runs entirely in Chrome. It includes six ranked choices,
 tap-to-color feedback tiles, custom-guess overrides, undo, automatic saved
-progress, and offline support after the first visit. Players can choose the
+progress, per-game recommendation accuracy, and offline support after the first
+visit. Recommendation accuracy is the percentage of recorded turns on which
+the player used the solver's #1 choice. Players can choose the
 modern 3,209-word NYT WordleBot answer list, the original 2,315-word list, or a
 broad 14,855-word accepted-guess list. Only the original dictionary uses the
 exact Level 12 tree; expanded dictionaries use the flexible Level 5 strategy.
