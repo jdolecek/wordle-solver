@@ -12,6 +12,7 @@ const els = {};
 let answers = [];
 let answerSet = new Set();
 let policy = new Map();
+let methodComparisons = {};
 let state = freshState();
 
 function freshState() {
@@ -31,6 +32,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     stats: document.getElementById("stats"),
     statsList: document.getElementById("stats-list"),
     statsBack: document.getElementById("stats-back"),
+    knownWord: document.getElementById("known-word"),
+    compareWord: document.getElementById("compare-word"),
+    comparisonMessage: document.getElementById("comparison-message"),
+    comparisonResults: document.getElementById("comparison-results"),
+    comparisonWord: document.getElementById("comparison-word"),
+    comparisonBest: document.getElementById("comparison-best"),
+    comparisonList: document.getElementById("comparison-list"),
     candidateCount: document.getElementById("candidate-count"),
     candidateLabel: document.getElementById("candidate-label"),
     history: document.getElementById("history"),
@@ -54,13 +62,15 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
   bindEvents();
   try {
-    const [answerText, treeText] = await Promise.all([
+    const [answerText, treeText, comparisonData] = await Promise.all([
       fetch("data/solutions.txt").then(requireOk).then(r => r.text()),
       fetch("data/optimal_strategy.txt").then(requireOk).then(r => r.text()),
+      fetch("data/method_comparisons.json").then(requireOk).then(r => r.json()),
     ]);
     answers = answerText.trim().split(/\s+/).map(w => w.toLowerCase());
     answerSet = new Set(answers);
     policy = parseOptimalTree(treeText);
+    methodComparisons = comparisonData;
     restoreState();
     els.loading.hidden = true;
     showStartMenu();
@@ -97,6 +107,12 @@ function bindEvents() {
   els.resumeExisting.addEventListener("click", startExistingPuzzle);
   els.showStats.addEventListener("click", showStrategyStats);
   els.statsBack.addEventListener("click", showStartMenu);
+  els.compareWord.addEventListener("click", compareKnownWord);
+  els.knownWord.addEventListener("keydown", event => { if (event.key === "Enter") compareKnownWord(); });
+  els.knownWord.addEventListener("input", () => {
+    els.knownWord.value = els.knownWord.value.replace(/[^a-z]/gi, "").slice(0, 5);
+    els.comparisonMessage.textContent = "";
+  });
   els.backToMenu.addEventListener("click", showStartMenu);
 }
 
@@ -335,6 +351,10 @@ function showStrategyStats() {
   els.startMenu.hidden = true;
   els.game.hidden = true;
   els.stats.hidden = false;
+  els.knownWord.focus();
+  renderOverallStats();
+}
+function renderOverallStats() {
   const bestAverage = Math.min(...STRATEGY_STATS.map(item => item.average));
   els.statsList.innerHTML = "";
   for (const item of STRATEGY_STATS) {
@@ -354,6 +374,42 @@ function showStrategyStats() {
       <p class="distribution-label">Guesses — ${distribution}</p>`;
     els.statsList.append(card);
   }
+}
+function compareKnownWord() {
+  const word = els.knownWord.value.trim().toLowerCase();
+  els.comparisonMessage.textContent = "";
+  if (!/^[a-z]{5}$/.test(word)) {
+    els.comparisonResults.hidden = true;
+    els.comparisonMessage.textContent = "Enter exactly five letters.";
+    return;
+  }
+  const paths = methodComparisons[word];
+  if (!paths) {
+    els.comparisonResults.hidden = true;
+    els.comparisonMessage.textContent = "That word is not in the 2,315-answer comparison set.";
+    return;
+  }
+  const bestScore = Math.min(...paths.map(path => path.length));
+  const winners = STRATEGY_STATS.filter((_, index) => paths[index].length === bestScore).map(item => `Level ${item.level}`);
+  els.comparisonWord.textContent = word.toUpperCase();
+  els.comparisonBest.textContent = `${winners.join(", ")} ${winners.length === 1 ? "wins" : "tie"} at ${bestScore} guess${bestScore === 1 ? "" : "es"}`;
+  els.comparisonList.innerHTML = "";
+  STRATEGY_STATS.forEach((item, index) => {
+    const path = paths[index];
+    const card = document.createElement("article");
+    card.className = `comparison-card${path.length === bestScore ? " best" : ""}`;
+    const guessPath = path.map((guess, guessIndex) =>
+      `${guessIndex ? '<span class="path-arrow">→</span>' : ""}<span class="path-word">${guess.toUpperCase()}</span>`
+    ).join("");
+    card.innerHTML = `
+      <div class="comparison-card-head">
+        <span class="stats-name"><strong>Level ${item.level}</strong><small>${item.name}</small></span>
+        <span class="comparison-score">${path.length} guess${path.length === 1 ? "" : "es"}</span>
+      </div>
+      <div class="guess-path">${guessPath}</div>`;
+    els.comparisonList.append(card);
+  });
+  els.comparisonResults.hidden = false;
 }
 function startNewGame() {
   if ((state.history.length || state.selectedGuess) && !window.confirm("Erase the saved puzzle and start over?")) return;
