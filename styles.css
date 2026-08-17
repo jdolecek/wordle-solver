@@ -177,6 +177,9 @@ h2 { margin-bottom: .7rem; font-size: 1.25rem; }
 .stats-note { box-shadow: none; }
 .stats-note p { margin: 0; color: var(--muted); font-size: .83rem; line-height: 1.45; }
 .stats-note strong { color: var(--text); }
+.editor-benchmark { margin-top: 1rem; border-color: var(--green); background: rgba(83,141,78,.12); }
+.editor-benchmark h2 { margin: .2rem 0 .35rem; color: var(--accent); font-size: 1.5rem; }
+.editor-benchmark > p:last-child { margin: 0; color: var(--muted); font-size: .82rem; line-height: 1.45; }
 
 .history { display: grid; gap: .45rem; }
 .history-row, .feedback-tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: .35rem; }
