@@ -1,6 +1,12 @@
 const MARKS = ["gray", "yellow", "green"];
 const MARK_CHARS = ["B", "Y", "G"];
 const STORAGE_KEY = "wordle-solver-game-v1";
+const STRATEGY_STATS = [
+  { level: 5, name: "Greedy information", min: 2, average: 3.45788, max: 5, counts: [82, 1156, 1012, 65] },
+  { level: 10, name: "Risk-averse minimax", min: 2, average: 3.47862, max: 5, counts: [83, 1106, 1061, 65] },
+  { level: 11, name: "Expected turns", min: 2, average: 3.46782, max: 5, counts: [83, 1128, 1042, 62] },
+  { level: 12, name: "Provably optimal", min: 2, average: 3.42117, max: 5, counts: [78, 1225, 971, 41] },
+];
 
 const els = {};
 let answers = [];
@@ -21,6 +27,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     continueGame: document.getElementById("continue-game"),
     continueDescription: document.getElementById("continue-description"),
     resumeExisting: document.getElementById("resume-existing"),
+    showStats: document.getElementById("show-stats"),
+    stats: document.getElementById("stats"),
+    statsList: document.getElementById("stats-list"),
+    statsBack: document.getElementById("stats-back"),
     candidateCount: document.getElementById("candidate-count"),
     candidateLabel: document.getElementById("candidate-label"),
     history: document.getElementById("history"),
@@ -85,6 +95,8 @@ function bindEvents() {
   els.startNew.addEventListener("click", startNewGame);
   els.continueGame.addEventListener("click", continueSavedGame);
   els.resumeExisting.addEventListener("click", startExistingPuzzle);
+  els.showStats.addEventListener("click", showStrategyStats);
+  els.statsBack.addEventListener("click", showStartMenu);
   els.backToMenu.addEventListener("click", showStartMenu);
 }
 
@@ -305,6 +317,7 @@ function confirmNewGame() {
 }
 function showStartMenu() {
   els.game.hidden = true;
+  els.stats.hidden = true;
   els.startMenu.hidden = false;
   const hasSavedGame = state.history.length > 0 || Boolean(state.selectedGuess);
   els.continueGame.disabled = !hasSavedGame;
@@ -314,8 +327,33 @@ function showStartMenu() {
 }
 function openGame() {
   els.startMenu.hidden = true;
+  els.stats.hidden = true;
   els.game.hidden = false;
   render();
+}
+function showStrategyStats() {
+  els.startMenu.hidden = true;
+  els.game.hidden = true;
+  els.stats.hidden = false;
+  const bestAverage = Math.min(...STRATEGY_STATS.map(item => item.average));
+  els.statsList.innerHTML = "";
+  for (const item of STRATEGY_STATS) {
+    const total = item.counts.reduce((sum, count) => sum + count, 0);
+    const card = document.createElement("article");
+    card.className = `stats-card${item.average === bestAverage ? " best" : ""}`;
+    const bars = item.counts.map(count => `<span style="width:${(count / total * 100).toFixed(3)}%"></span>`).join("");
+    const distribution = item.counts.map((count, index) => `${index + 2}: ${count.toLocaleString()}`).join(" · ");
+    card.innerHTML = `
+      <div class="stats-card-head">
+        <span class="stats-name"><strong>Level ${item.level}</strong><small>${item.name}</small></span>
+        <span class="stat-number">${item.min}</span>
+        <span class="stat-number average">${item.average.toFixed(2)}</span>
+        <span class="stat-number">${item.max}</span>
+      </div>
+      <div class="distribution" aria-hidden="true">${bars}</div>
+      <p class="distribution-label">Guesses — ${distribution}</p>`;
+    els.statsList.append(card);
+  }
 }
 function startNewGame() {
   if ((state.history.length || state.selectedGuess) && !window.confirm("Erase the saved puzzle and start over?")) return;

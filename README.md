@@ -7,7 +7,9 @@ An interactive Python Wordle solver that explains each recommendation.
 The `web/` application provides the same optimal solver in a mobile-first
 interface that runs entirely in Chrome. It includes six ranked choices,
 tap-to-color feedback tiles, custom-guess overrides, undo, automatic saved
-progress, and offline support after the first visit.
+progress, and offline support after the first visit. Its mode menu also shows
+the minimum, average, maximum, and complete score distribution for Levels 5,
+10, 11, and 12 across all 2,315 bundled answers.
 
 The production bundle is published from the repository's `gh-pages` branch.
 For this repository the address is:

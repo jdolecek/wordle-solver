@@ -45,6 +45,10 @@
           <span class="mode-icon">＋</span>
           <span><strong>I've already started</strong><small>Enter a word you played, then tap in its colors.</small></span>
         </button>
+        <button id="show-stats" class="mode-button" type="button">
+          <span class="mode-icon">▥</span>
+          <span><strong>Compare solver methods</strong><small>See the minimum, average, maximum, and full score distribution.</small></span>
+        </button>
       </div>
 
       <div class="how-it-works panel">
@@ -55,6 +59,22 @@
           <li>Tap the five tiles here to match Wordle's colors.</li>
         </ol>
       </div>
+    </section>
+
+    <section id="stats" class="stats-screen" hidden>
+      <div class="welcome-copy">
+        <p class="eyebrow">ALL 2,315 ANSWERS</p>
+        <h2>Guess counts by method</h2>
+        <p>Results from solving every official answer. Lower is better.</p>
+      </div>
+      <div class="stats-key" aria-label="Statistic columns">
+        <span>Method</span><span>Min</span><span>Avg</span><span>Max</span>
+      </div>
+      <div id="stats-list" class="stats-list"></div>
+      <div class="panel stats-note">
+        <p><strong>Why every minimum is 2:</strong> SALET is the shared opening guess but is not one of the 2,315 answers. Each method has some answers it solves on guess two.</p>
+      </div>
+      <button id="stats-back" class="primary-button" type="button">Back to modes</button>
     </section>
 
     <div id="game" hidden>
