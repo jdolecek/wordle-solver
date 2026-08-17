@@ -88,6 +88,34 @@ h2 { margin-bottom: .7rem; font-size: 1.25rem; }
 .spinner { width: 1.25rem; height: 1.25rem; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.start-menu { padding-top: 1.25rem; }
+.welcome-copy { padding: 0 .25rem .35rem; }
+.welcome-copy h2 { margin-bottom: .4rem; font-size: 1.55rem; }
+.welcome-copy > p:last-child { color: var(--muted); }
+.mode-list { display: grid; gap: .65rem; }
+.mode-button {
+  display: grid;
+  grid-template-columns: 2.6rem 1fr;
+  gap: .75rem;
+  align-items: center;
+  width: 100%;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--panel);
+  color: var(--text);
+  text-align: left;
+}
+.mode-button.primary-mode { border-color: var(--green); background: rgba(83,141,78,.17); }
+.mode-button:disabled { opacity: .42; }
+.mode-button strong, .mode-button small { display: block; }
+.mode-button strong { margin-bottom: .22rem; font-size: 1.02rem; }
+.mode-button small { color: var(--muted); line-height: 1.35; }
+.mode-icon { display: grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: .7rem; background: var(--panel-raised); font-size: 1.2rem; }
+.how-it-works { box-shadow: none; }
+.how-it-works ol { margin: .65rem 0 0; padding-left: 1.4rem; color: var(--muted); }
+.how-it-works li { margin: .45rem 0; padding-left: .2rem; }
+
 .history { display: grid; gap: .45rem; }
 .history-row, .feedback-tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: .35rem; }
 
@@ -161,7 +189,7 @@ input {
 .solved-panel { text-align: center; }
 .solved-panel h2 { font-size: 1.7rem; }
 
-footer { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: 1rem .25rem 0; color: var(--muted); font-size: .75rem; }
+footer { display: flex; justify-content: space-between; align-items: baseline; gap: .7rem; padding: 1rem .25rem 0; color: var(--muted); font-size: .75rem; }
 footer .text-button { margin: 0; }
 
 @media (min-width: 38rem) {
