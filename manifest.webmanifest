@@ -1,0 +1,12 @@
+{
+  "name": "Wordle Solver",
+  "short_name": "Solver",
+  "description": "A mobile Wordle assistant using a provably optimal strategy.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#121213",
+  "theme_color": "#121213",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
