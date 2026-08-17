@@ -27,6 +27,7 @@ body {
 
 button, input, select { font: inherit; }
 button { touch-action: manipulation; }
+select { min-width: 0; max-width: 100%; }
 
 .app-shell {
   width: min(100%, 42rem);
@@ -45,6 +46,10 @@ header {
 h1, h2, p { margin-top: 0; }
 h1 { margin-bottom: 0; font-size: clamp(1.7rem, 7vw, 2.3rem); letter-spacing: -.04em; }
 h2 { margin-bottom: .7rem; font-size: 1.25rem; }
+
+.brand { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; }
+.brand-logo { display: block; width: clamp(13rem, 58vw, 18rem); height: auto; }
+.brand-subtitle { margin: .2rem 0 0 .15rem; color: var(--muted); font-size: .78rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 
 .eyebrow {
   margin-bottom: .2rem;
@@ -93,14 +98,14 @@ h2 { margin-bottom: .7rem; font-size: 1.25rem; }
 .welcome-copy { padding: 0 .25rem .35rem; }
 .welcome-copy h2 { margin-bottom: .4rem; font-size: 1.55rem; }
 .welcome-copy > p:last-child { color: var(--muted); }
-.dictionary-picker { margin: 0 0 .75rem; box-shadow: none; }
+.dictionary-picker { min-width: 0; margin: 0 0 .75rem; box-shadow: none; }
 .dictionary-picker label { display: block; margin-bottom: .45rem; color: var(--accent); font-size: .72rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .dictionary-picker select { width: 100%; padding: .7rem; border: 1px solid var(--border); border-radius: .7rem; background: #141416; color: var(--text); font-weight: 700; }
 .dictionary-picker p { margin: .55rem 0 0; color: var(--muted); font-size: .78rem; line-height: 1.4; }
 .mode-list { display: grid; gap: .65rem; }
 .mode-button {
   display: grid;
-  grid-template-columns: 2.6rem 1fr;
+  grid-template-columns: 2.6rem minmax(0, 1fr);
   gap: .75rem;
   align-items: center;
   width: 100%;
@@ -114,6 +119,7 @@ h2 { margin-bottom: .7rem; font-size: 1.25rem; }
 .mode-button.primary-mode { border-color: var(--green); background: rgba(83,141,78,.17); }
 .mode-button:disabled { opacity: .42; }
 .mode-button strong, .mode-button small { display: block; }
+.mode-button > span { min-width: 0; }
 .mode-button strong { margin-bottom: .22rem; font-size: 1.02rem; }
 .mode-button small { color: var(--muted); line-height: 1.35; }
 .mode-icon { display: grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: .7rem; background: var(--panel-raised); font-size: 1.2rem; }
@@ -236,6 +242,13 @@ input {
 .message { min-height: 1.4rem; margin: .8rem .2rem 0; color: var(--danger); font-size: .9rem; }
 .solved-panel { text-align: center; }
 .solved-panel h2 { font-size: 1.7rem; }
+.accuracy-result { margin-top: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: .85rem; background: var(--panel-raised); }
+.accuracy-result > span, .accuracy-result > small { display: block; color: var(--muted); }
+.accuracy-result > span { font-size: .74rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.accuracy-result > strong { display: block; margin: .25rem 0; color: var(--accent); font-size: 2rem; }
+.accuracy-result > small { font-size: .78rem; }
+.accuracy-track { height: .45rem; margin-top: .8rem; overflow: hidden; border-radius: 999px; background: var(--border); }
+.accuracy-track span { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--green); transition: width .35s ease; }
 
 footer { display: flex; justify-content: space-between; align-items: baseline; gap: .7rem; padding: 1rem .25rem 0; color: var(--muted); font-size: .75rem; }
 footer .text-button { margin: 0; }

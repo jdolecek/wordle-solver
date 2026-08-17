@@ -1,6 +1,7 @@
-const CACHE = "wordle-solver-v8";
+const CACHE = "level-12-v9";
 const ASSETS = [
-  "./", "index.html", "styles.css", "app.js", "manifest.webmanifest", "icons/icon.svg",
+  "./", "index.html", "styles.css", "app.js", "manifest.webmanifest",
+  "icons/icon.svg", "icons/level-12-logo.svg",
   "data/solutions.txt", "data/nyt_wordlebot_answers.txt", "data/nyt_accepted_guesses.txt",
   "data/optimal_strategy.txt", "data/method_comparisons.json", "data/dictionary_openings.json"
 ];
