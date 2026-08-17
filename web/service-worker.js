@@ -1,4 +1,4 @@
-const CACHE = "wordle-solver-v4";
+const CACHE = "wordle-solver-v5";
 const ASSETS = [
   "./", "index.html", "styles.css", "app.js", "manifest.webmanifest", "icons/icon.svg",
   "data/solutions.txt", "data/optimal_strategy.txt"
@@ -13,6 +13,18 @@ self.addEventListener("activate", event => event.waitUntil(
 ));
 self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          const copy = response.clone();
+          caches.open(CACHE).then(cache => cache.put("./", copy));
+          return response;
+        })
+        .catch(() => caches.match("./"))
+    );
+    return;
+  }
   event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
     const copy = response.clone(); caches.open(CACHE).then(cache => cache.put(event.request, copy)); return response;
   })));

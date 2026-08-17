@@ -54,7 +54,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     restoreState();
     els.loading.hidden = true;
     showStartMenu();
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js");
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("service-worker.js").then(registration => registration.update());
+    }
   } catch (error) {
     els.loading.innerHTML = `<p>Could not load the solver. Check your connection and refresh.</p>`;
     console.error(error);
