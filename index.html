@@ -40,11 +40,6 @@
           <option value="broad">All accepted words · 14,855 (broad)</option>
         </select>
         <p id="dictionary-description"></p>
-        <div class="start-word-setting">
-          <label for="start-word">Starting word</label>
-          <input id="start-word" maxlength="5" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" value="SALET">
-          <p id="start-word-note">SALET is recommended, or enter any accepted five-letter word.</p>
-        </div>
       </div>
 
       <div class="mode-list">
@@ -74,6 +69,21 @@
           <li>Tap the five tiles here to match Wordle's colors.</li>
         </ol>
       </div>
+    </section>
+
+    <section id="start-setup" class="start-setup" hidden>
+      <div class="welcome-copy">
+        <p class="eyebrow">NEW PUZZLE</p>
+        <h2>Choose your starting word</h2>
+        <p>SALET is recommended, but you can begin with any accepted Wordle guess.</p>
+      </div>
+      <div class="panel start-word-setting">
+        <label for="start-word">Starting word</label>
+        <input id="start-word" maxlength="5" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" value="SALET">
+        <p id="start-word-note">SALET is the recommended default.</p>
+      </div>
+      <button id="begin-new-game" class="primary-button" type="button">Start puzzle</button>
+      <button id="start-setup-back" class="text-button setup-back" type="button">Back to modes</button>
     </section>
 
     <section id="stats" class="stats-screen" hidden>

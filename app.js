@@ -55,8 +55,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   Object.assign(els, {
     loading: document.getElementById("loading"),
     startMenu: document.getElementById("start-menu"),
+    startSetup: document.getElementById("start-setup"),
     game: document.getElementById("game"),
     startNew: document.getElementById("start-new"),
+    beginNewGame: document.getElementById("begin-new-game"),
+    startSetupBack: document.getElementById("start-setup-back"),
     continueGame: document.getElementById("continue-game"),
     continueDescription: document.getElementById("continue-description"),
     dictionaryChoice: document.getElementById("dictionary-choice"),
@@ -154,7 +157,9 @@ function bindEvents() {
   els.undo.addEventListener("click", undoGuess);
   els.newGame.addEventListener("click", confirmNewGame);
   els.playAgain.addEventListener("click", resetGame);
-  els.startNew.addEventListener("click", startNewGame);
+  els.startNew.addEventListener("click", showNewGameSetup);
+  els.beginNewGame.addEventListener("click", startNewGame);
+  els.startSetupBack.addEventListener("click", showStartMenu);
   els.continueGame.addEventListener("click", continueSavedGame);
   els.resumeExisting.addEventListener("click", startExistingPuzzle);
   els.dictionaryChoice.addEventListener("change", selectDictionary);
@@ -465,6 +470,7 @@ function confirmNewGame() {
 function showStartMenu() {
   els.game.hidden = true;
   els.stats.hidden = true;
+  els.startSetup.hidden = true;
   els.startMenu.hidden = false;
   els.dictionaryChoice.value = selectedDictionary;
   updateDictionaryCopy();
@@ -525,8 +531,7 @@ function updateStartDescription(word) {
     els.startNewDescription.textContent = DICTIONARY_META.original.start;
     return;
   }
-  const coverage = selectedDictionary === "nyt" ? "3,209 modern likely answers" : "every accepted word as a possible answer";
-  els.startNewDescription.textContent = `Begin with ${word.toUpperCase()} using ${coverage}.`;
+  els.startNewDescription.textContent = "Choose your opening word, then begin with the flexible strategy.";
 }
 function applyDictionary(dictionary) {
   const active = dictionaries[dictionary] ? dictionary : "nyt";
@@ -538,12 +543,14 @@ function applyDictionary(dictionary) {
 function openGame() {
   applyDictionary(state.dictionary);
   els.startMenu.hidden = true;
+  els.startSetup.hidden = true;
   els.stats.hidden = true;
   els.game.hidden = false;
   render();
 }
 function showStrategyStats() {
   els.startMenu.hidden = true;
+  els.startSetup.hidden = true;
   els.game.hidden = true;
   els.stats.hidden = false;
   els.knownWord.focus();
@@ -613,6 +620,19 @@ function startNewGame() {
   state = freshState(selectedDictionary, startWord);
   saveState();
   openGame();
+}
+function showNewGameSetup() {
+  if (selectedDictionary === "original") {
+    startNewGame();
+    return;
+  }
+  updateDictionaryCopy();
+  els.startMenu.hidden = true;
+  els.stats.hidden = true;
+  els.game.hidden = true;
+  els.startSetup.hidden = false;
+  els.startWord.focus();
+  els.startWord.select();
 }
 function continueSavedGame() { openGame(); }
 function startExistingPuzzle() {

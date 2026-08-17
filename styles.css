@@ -102,10 +102,14 @@ h2 { margin-bottom: .7rem; font-size: 1.25rem; }
 .dictionary-picker label { display: block; margin-bottom: .45rem; color: var(--accent); font-size: .72rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .dictionary-picker select { width: 100%; padding: .7rem; border: 1px solid var(--border); border-radius: .7rem; background: #141416; color: var(--text); font-weight: 700; }
 .dictionary-picker p { margin: .55rem 0 0; color: var(--muted); font-size: .78rem; line-height: 1.4; }
-.start-word-setting { margin-top: .9rem; padding-top: .9rem; border-top: 1px solid var(--border); }
+.start-setup { padding-top: 1.25rem; }
+.start-word-setting { margin: .25rem 0 1rem; }
+.start-word-setting label { display: block; margin-bottom: .45rem; color: var(--accent); font-size: .72rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .start-word-setting input { width: 100%; padding: .7rem; border: 1px solid var(--border); border-radius: .7rem; background: #141416; color: var(--text); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .start-word-setting input:disabled { opacity: .65; cursor: not-allowed; }
-.dictionary-picker p.input-error { color: var(--danger); }
+.start-word-setting p { margin: .55rem 0 0; color: var(--muted); font-size: .78rem; line-height: 1.4; }
+.start-word-setting p.input-error { color: var(--danger); }
+.setup-back { display: block; margin: .75rem auto 0; }
 .mode-list { display: grid; gap: .65rem; }
 .mode-button {
   display: grid;
