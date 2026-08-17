@@ -117,6 +117,22 @@ h2 { margin-bottom: .7rem; font-size: 1.25rem; }
 .how-it-works li { margin: .45rem 0; padding-left: .2rem; }
 
 .stats-screen { padding-top: 1.25rem; }
+.comparison-lookup { margin-top: .25rem; }
+.comparison-lookup label { display: block; margin-bottom: .5rem; color: var(--muted); font-size: .85rem; }
+.comparison-message { min-height: 1.2rem; margin: .55rem 0 0; color: var(--danger); font-size: .82rem; }
+.comparison-results { margin-top: 1.25rem; }
+.comparison-results h2 { font-size: 1.05rem; }
+.comparison-list { display: grid; gap: .65rem; }
+.comparison-card { padding: .9rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--panel); }
+.comparison-card.best { border-color: var(--green); background: rgba(83,141,78,.12); }
+.comparison-card-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.comparison-score { color: var(--accent); font-weight: 800; white-space: nowrap; }
+.guess-path { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin-top: .75rem; }
+.path-word { padding: .35rem .45rem; border-radius: .4rem; background: var(--panel-raised); font-size: .78rem; font-weight: 800; letter-spacing: .06em; }
+.path-arrow { color: var(--muted); font-size: .75rem; }
+.overall-stats { margin-top: 1rem; }
+.overall-stats summary { padding: .8rem .2rem; color: var(--muted); cursor: pointer; font-size: .85rem; }
+.overall-stats[open] summary { color: var(--text); }
 .stats-key, .stats-card-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 2.5rem 3.5rem 2.5rem;

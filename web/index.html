@@ -47,7 +47,7 @@
         </button>
         <button id="show-stats" class="mode-button" type="button">
           <span class="mode-icon">▥</span>
-          <span><strong>Compare solver methods</strong><small>See the minimum, average, maximum, and full score distribution.</small></span>
+          <span><strong>Compare solver methods</strong><small>Enter a known answer and see every method's score and path.</small></span>
         </button>
       </div>
 
@@ -63,17 +63,36 @@
 
     <section id="stats" class="stats-screen" hidden>
       <div class="welcome-copy">
-        <p class="eyebrow">ALL 2,315 ANSWERS</p>
-        <h2>Guess counts by method</h2>
-        <p>Results from solving every official answer. Lower is better.</p>
+        <p class="eyebrow">COMPARE METHODS</p>
+        <h2>Enter the known answer</h2>
+        <p>See exactly how each strategy would solve that word.</p>
       </div>
-      <div class="stats-key" aria-label="Statistic columns">
-        <span>Method</span><span>Min</span><span>Avg</span><span>Max</span>
+
+      <div class="panel comparison-lookup">
+        <label for="known-word">Wordle answer</label>
+        <div class="input-row">
+          <input id="known-word" maxlength="5" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="PROVE">
+          <button id="compare-word" class="secondary-button" type="button">Compare</button>
+        </div>
+        <p id="comparison-message" class="comparison-message" role="alert"></p>
       </div>
-      <div id="stats-list" class="stats-list"></div>
-      <div class="panel stats-note">
-        <p><strong>Why every minimum is 2:</strong> SALET is the shared opening guess but is not one of the 2,315 answers. Each method has some answers it solves on guess two.</p>
-      </div>
+
+      <section id="comparison-results" class="comparison-results" aria-live="polite" hidden>
+        <p class="eyebrow">RESULTS FOR <span id="comparison-word"></span></p>
+        <h2 id="comparison-best"></h2>
+        <div id="comparison-list" class="comparison-list"></div>
+      </section>
+
+      <details class="overall-stats">
+        <summary>Overall benchmark averages</summary>
+        <div class="stats-key" aria-label="Statistic columns">
+          <span>Method</span><span>Min</span><span>Avg</span><span>Max</span>
+        </div>
+        <div id="stats-list" class="stats-list"></div>
+        <div class="panel stats-note">
+          <p>Across all 2,315 answers, every method ranges from 2 to 5 guesses. Level 12 has the lowest average at 3.42.</p>
+        </div>
+      </details>
       <button id="stats-back" class="primary-button" type="button">Back to modes</button>
     </section>
 

@@ -1,7 +1,7 @@
-const CACHE = "wordle-solver-v6";
+const CACHE = "wordle-solver-v7";
 const ASSETS = [
   "./", "index.html", "styles.css", "app.js", "manifest.webmanifest", "icons/icon.svg",
-  "data/solutions.txt", "data/optimal_strategy.txt"
+  "data/solutions.txt", "data/optimal_strategy.txt", "data/method_comparisons.json"
 ];
 self.addEventListener("install", event => event.waitUntil(
   caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting())
