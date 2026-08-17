@@ -1,4 +1,4 @@
-const CACHE = "wordle-solver-v1";
+const CACHE = "wordle-solver-v2";
 const ASSETS = [
   "./", "index.html", "styles.css", "app.js", "manifest.webmanifest", "icons/icon.svg",
   "data/solutions.txt", "data/optimal_strategy.txt"

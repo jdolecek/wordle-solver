@@ -123,7 +123,14 @@ function recommendation(candidates) {
   if (state.optimal) {
     const key = state.history.map(item => item.feedback).join("|");
     const exact = policy.get(key);
-    if (exact) return { primary: exact, alternatives: rankedLevel5(candidates, 6).filter(w => w !== exact).slice(0, 5), exact: true };
+    if (exact) {
+      // Avoid blocking the first mobile paint with hundreds of thousands of
+      // feedback calculations. These are the verified Level 5 opening ranks.
+      const alternatives = state.history.length === 0
+        ? ["raise", "slate", "crate", "irate", "trace"]
+        : rankedLevel5(candidates, 6).filter(w => w !== exact).slice(0, 5);
+      return { primary: exact, alternatives, exact: true };
+    }
     state.optimal = false;
   }
   const ranked = rankedLevel5(candidates, 6);
