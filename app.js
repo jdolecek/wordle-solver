@@ -3,6 +3,7 @@ const MARK_CHARS = ["B", "Y", "G"];
 const STORAGE_KEY = "wordle-solver-game-v1";
 const DICTIONARY_KEY = "wordle-solver-dictionary-v1";
 const START_WORD_KEY = "level-12-start-word-v1";
+const STRATEGY_KEY = "level-12-strategy-v1";
 const DICTIONARY_META = {
   nyt: {
     label: "NYT 3,209",
@@ -26,10 +27,10 @@ const ROOT_ALTERNATIVES = {
   broad: ["tares", "lares", "rales", "rates", "ranes"],
 };
 const STRATEGY_STATS = [
-  { level: 5, name: "Greedy information", min: 2, average: 3.45788, max: 5, counts: [82, 1156, 1012, 65] },
-  { level: 10, name: "Risk-averse minimax", min: 2, average: 3.47862, max: 5, counts: [83, 1106, 1061, 65] },
-  { level: 11, name: "Expected turns", min: 2, average: 3.46782, max: 5, counts: [83, 1128, 1042, 62] },
-  { level: 12, name: "Provably optimal", min: 2, average: 3.42117, max: 5, counts: [78, 1225, 971, 41] },
+  { level: 5, name: "Greedy information", min: 2, average: 3.45788, averageTie: 73.53261, max: 5, counts: [82, 1156, 1012, 65] },
+  { level: 10, name: "Risk-averse minimax", min: 2, average: 3.47862, averageTie: 74.03672, max: 5, counts: [83, 1106, 1061, 65] },
+  { level: 11, name: "Expected turns", min: 2, average: 3.46782, averageTie: 73.69546, max: 5, counts: [83, 1128, 1042, 62] },
+  { level: 12, name: "Provably optimal", min: 2, average: 3.42117, averageTie: 72.82635, max: 5, counts: [78, 1225, 971, 41] },
 ];
 
 const els = {};
@@ -38,17 +39,24 @@ let answers = [];
 let acceptedGuesses = [];
 let policy = new Map();
 let editorPolicy = new Map();
+let tiebreakPolicy = new Map();
+let editorTiebreakPolicy = new Map();
 let methodComparisons = {};
+let tiebreakComparisons = {};
 let dictionaryOpenings = {};
 let selectedDictionary = "nyt";
 let selectedStartWord = "salet";
+let selectedStrategy = "leaderboard";
 let state = freshState();
 
-function freshState(dictionary = selectedDictionary, startWord = selectedStartWord) {
+function freshState(dictionary = selectedDictionary, startWord = selectedStartWord, strategy = selectedStrategy) {
   const opener = dictionary === "original" ? "salet" : startWord;
+  const fixed = opener === "salet" && dictionary !== "broad";
   return {
-    dictionary, startWord: opener, history: [], optimal: dictionary === "original",
-    editorAware: dictionary === "nyt" && opener === "salet", selectedGuess: null,
+    dictionary, startWord: opener, strategy, history: [],
+    optimal: fixed && strategy === "fastest" && dictionary === "original",
+    editorAware: fixed && strategy === "fastest" && dictionary === "nyt",
+    tiebreakAware: fixed && strategy === "leaderboard", selectedGuess: null,
     selectedRecommendation: null, feedback: [0, 0, 0, 0, 0],
   };
 }
@@ -68,6 +76,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     dictionaryDescription: document.getElementById("dictionary-description"),
     startWord: document.getElementById("start-word"),
     startWordNote: document.getElementById("start-word-note"),
+    strategyChoice: document.getElementById("strategy-choice"),
+    strategyNote: document.getElementById("strategy-note"),
     startNewDescription: document.getElementById("start-new-description"),
     resumeExisting: document.getElementById("resume-existing"),
     showStats: document.getElementById("show-stats"),
@@ -100,6 +110,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     accuracyScore: document.getElementById("accuracy-score"),
     accuracyDetail: document.getElementById("accuracy-detail"),
     accuracyBar: document.getElementById("accuracy-bar"),
+    gameTiebreakScore: document.getElementById("game-tiebreak-score"),
+    editorAverageGuesses: document.getElementById("editor-average-guesses"),
+    editorAverageTiebreak: document.getElementById("editor-average-tiebreak"),
     message: document.getElementById("message"),
     undo: document.getElementById("undo"),
     newGame: document.getElementById("new-game"),
@@ -112,13 +125,23 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (!DICTIONARY_META[selectedDictionary]) selectedDictionary = "nyt";
     selectedStartWord = (localStorage.getItem(START_WORD_KEY) || "salet").toLowerCase();
     if (!/^[a-z]{5}$/.test(selectedStartWord)) selectedStartWord = "salet";
-    const [answerText, nytAnswerText, guessText, treeText, editorTreeText, comparisonData, openingData] = await Promise.all([
+    selectedStrategy = localStorage.getItem(STRATEGY_KEY) || "leaderboard";
+    if (!["leaderboard", "fastest"].includes(selectedStrategy)) selectedStrategy = "leaderboard";
+    const [
+      answerText, nytAnswerText, guessText, treeText, editorTreeText,
+      tiebreakTreeText, editorTiebreakTreeText, comparisonData,
+      tiebreakComparisonData, tiebreakStats, openingData,
+    ] = await Promise.all([
       fetch("data/solutions.txt").then(requireOk).then(r => r.text()),
       fetch("data/nyt_wordlebot_answers.txt").then(requireOk).then(r => r.text()),
       fetch("data/nyt_accepted_guesses.txt").then(requireOk).then(r => r.text()),
       fetch("data/optimal_strategy.txt").then(requireOk).then(r => r.text()),
       fetch("data/editor_strategy.txt").then(requireOk).then(r => r.text()),
+      fetch("data/tiebreak_strategy.txt").then(requireOk).then(r => r.text()),
+      fetch("data/editor_tiebreak_strategy.txt").then(requireOk).then(r => r.text()),
       fetch("data/method_comparisons.json").then(requireOk).then(r => r.json()),
+      fetch("data/tiebreak_comparisons.json").then(requireOk).then(r => r.json()),
+      fetch("data/tiebreak_stats.json").then(requireOk).then(r => r.json()),
       fetch("data/dictionary_openings.json").then(requireOk).then(r => r.json()),
     ]);
     const originalAnswers = answerText.trim().split(/\s+/).map(w => w.toLowerCase());
@@ -127,8 +150,20 @@ window.addEventListener("DOMContentLoaded", async () => {
     dictionaries = { original: originalAnswers, nyt: nytAnswers, broad: acceptedGuesses };
     policy = parseOptimalTree(treeText);
     editorPolicy = parseOptimalTree(editorTreeText);
+    tiebreakPolicy = parseOptimalTree(tiebreakTreeText);
+    editorTiebreakPolicy = parseOptimalTree(editorTiebreakTreeText);
     methodComparisons = comparisonData;
+    tiebreakComparisons = tiebreakComparisonData;
     dictionaryOpenings = openingData;
+    const leaderboardStats = tiebreakStats.original;
+    STRATEGY_STATS.push({
+      level: 13, name: "Leaderboard optimizer", min: leaderboardStats.min,
+      average: leaderboardStats.averageGuesses,
+      averageTie: leaderboardStats.averageTiebreak,
+      max: leaderboardStats.max, counts: leaderboardStats.counts,
+    });
+    els.editorAverageGuesses.textContent = tiebreakStats.editor.averageGuesses.toFixed(2);
+    els.editorAverageTiebreak.textContent = tiebreakStats.editor.averageTiebreak.toFixed(2);
     restoreState();
     els.loading.hidden = true;
     showStartMenu();
@@ -156,6 +191,7 @@ function bindEvents() {
     state.selectedRecommendation = null;
     state.optimal = historyFollowsPolicy(state.history);
     state.editorAware = historyFollowsEditorPolicy(state.history);
+    state.tiebreakAware = historyFollowsTiebreakPolicy(state.history);
     saveState();
     render();
   });
@@ -170,6 +206,7 @@ function bindEvents() {
   els.dictionaryChoice.addEventListener("change", selectDictionary);
   els.startWord.addEventListener("input", editStartWord);
   els.startWord.addEventListener("blur", validateStartWord);
+  els.strategyChoice.addEventListener("change", selectStrategy);
   els.showStats.addEventListener("click", showStrategyStats);
   els.statsBack.addEventListener("click", showStartMenu);
   els.compareWord.addEventListener("click", compareKnownWord);
@@ -253,6 +290,18 @@ function currentCandidates() {
 }
 
 function recommendation(candidates) {
+  if (state.tiebreakAware) {
+    const activePolicy = state.dictionary === "original" ? tiebreakPolicy : editorTiebreakPolicy;
+    const key = state.history.map(item => item.feedback).join("|");
+    const tiebreakChoice = activePolicy.get(key);
+    if (tiebreakChoice) {
+      const alternatives = state.history.length === 0
+        ? ROOT_ALTERNATIVES[state.dictionary]
+        : rankedTiebreak(candidates, 6).filter(word => word !== tiebreakChoice).slice(0, 5);
+      return { primary: tiebreakChoice, alternatives, tiebreakAware: true };
+    }
+    state.tiebreakAware = false;
+  }
   if (state.optimal) {
     const key = state.history.map(item => item.feedback).join("|");
     const exact = policy.get(key);
@@ -323,6 +372,51 @@ function rankedLevel5(candidates, limit) {
   return scored.slice(0, limit).map(item => item.word);
 }
 
+function tiebreakMatchValue(guess, answer) {
+  let value = 0;
+  for (let index = 0; index < 5; index++) {
+    value += guess[index] === answer[index] ? 2 : answer.includes(guess[index]) ? 1 : 0;
+  }
+  return value;
+}
+
+function tiebreakScore(path, answer) {
+  return path.reduce(
+    (total, guess, index) => total + (6 - index) * tiebreakMatchValue(guess, answer),
+    0,
+  );
+}
+
+function rankedTiebreak(candidates, limit) {
+  if (candidates.length === 1) return [candidates[0]];
+  const shortlisted = heuristicPool(candidates, candidates.length <= 60 ? 120 : 40, acceptedGuesses);
+  const pool = candidates.length <= 60
+    ? [...new Set([...shortlisted, ...candidates])]
+    : shortlisted;
+  const candidateSet = new Set(candidates);
+  const scored = pool.map(word => {
+    const groups = new Map();
+    let matchTotal = 0;
+    for (const answer of candidates) {
+      const code = feedbackCode(word, answer);
+      groups.set(code, (groups.get(code) || 0) + 1);
+      matchTotal += tiebreakMatchValue(word, answer);
+    }
+    let expectedWork = 0, worst = 0;
+    for (const [code, size] of groups) {
+      if (code !== 242) expectedWork += size * size;
+      worst = Math.max(worst, size);
+    }
+    return { word, expectedWork, matchTotal, worst, candidate: candidateSet.has(word) };
+  });
+  scored.sort((a, b) =>
+    a.expectedWork - b.expectedWork || b.matchTotal - a.matchTotal ||
+    a.worst - b.worst || Number(b.candidate) - Number(a.candidate) ||
+    a.word.localeCompare(b.word)
+  );
+  return scored.slice(0, limit).map(item => item.word);
+}
+
 function heuristicPool(candidates, limit, source) {
   const letters = new Map(), positions = new Map();
   for (const word of candidates) {
@@ -359,6 +453,8 @@ function render() {
   els.feedbackPanel.hidden = solved || !state.selectedGuess;
   if (solved) {
     els.solvedTitle.textContent = `Solved in ${state.history.length} guess${state.history.length === 1 ? "" : "es"}!`;
+    const answer = state.history.at(-1).guess;
+    els.gameTiebreakScore.textContent = tiebreakScore(state.history.map(item => item.guess), answer);
     renderAccuracy();
     saveState();
     return;
@@ -399,14 +495,19 @@ function renderHistory() {
 }
 
 function renderChoices(choice) {
-  els.strategyLabel.textContent = choice.exact
+  els.strategyLabel.textContent = choice.tiebreakAware
+    ? "LEVEL 13 · LEADERBOARD OPTIMIZER"
+    : choice.exact
     ? "PROVABLY OPTIMAL"
     : choice.editorAware ? "EDITOR-AWARE · DEEP SEARCH" : "LEVEL 5 · FLEXIBLE";
   const words = [choice.primary, ...choice.alternatives];
   els.choiceList.innerHTML = "";
   words.forEach((word, index) => {
     const button = document.createElement("button"); button.type = "button"; button.className = "choice-button";
-    const note = index === 0 && choice.exact ? "exact" : index === 0 && choice.editorAware ? "deep" : "info";
+    const note = index === 0 && choice.tiebreakAware
+      ? "lead"
+      : choice.tiebreakAware ? "tie"
+      : index === 0 && choice.exact ? "exact" : index === 0 && choice.editorAware ? "deep" : "info";
     button.innerHTML = `<span class="choice-rank">${index + 1}</span><span class="choice-word">${word.toUpperCase()}</span><span class="choice-note">${note}</span>`;
     button.addEventListener("click", () => selectGuess(word, choice.primary));
     els.choiceList.append(button);
@@ -419,6 +520,7 @@ function selectGuess(word, recommended) {
   state.feedback = [0, 0, 0, 0, 0];
   if (word !== recommended) state.optimal = false;
   if (word !== recommended) state.editorAware = false;
+  if (word !== recommended) state.tiebreakAware = false;
   saveState(); render();
 }
 
@@ -472,11 +574,12 @@ function undoGuess() {
   state.feedback = [0, 0, 0, 0, 0];
   state.optimal = historyFollowsPolicy(state.history);
   state.editorAware = historyFollowsEditorPolicy(state.history);
+  state.tiebreakAware = historyFollowsTiebreakPolicy(state.history);
   saveState(); render();
 }
 
 function historyFollowsPolicy(history) {
-  if (state.dictionary !== "original") return false;
+  if (state.strategy !== "fastest" || state.dictionary !== "original") return false;
   const feedbacks = [];
   for (const item of history) {
     if (policy.get(feedbacks.join("|")) !== item.guess) return false;
@@ -485,13 +588,23 @@ function historyFollowsPolicy(history) {
   return true;
 }
 function historyFollowsEditorPolicy(history) {
-  if (state.dictionary !== "nyt" || state.startWord !== "salet") return false;
+  if (state.strategy !== "fastest" || state.dictionary !== "nyt" || state.startWord !== "salet") return false;
   const feedbacks = [];
   for (const item of history) {
     if (editorPolicy.get(feedbacks.join("|")) !== item.guess) return false;
     feedbacks.push(item.feedback);
   }
   return editorPolicy.has(feedbacks.join("|"));
+}
+function historyFollowsTiebreakPolicy(history) {
+  if (state.strategy !== "leaderboard" || state.startWord !== "salet" || state.dictionary === "broad") return false;
+  const activePolicy = state.dictionary === "original" ? tiebreakPolicy : editorTiebreakPolicy;
+  const feedbacks = [];
+  for (const item of history) {
+    if (activePolicy.get(feedbacks.join("|")) !== item.guess) return false;
+    feedbacks.push(item.feedback);
+  }
+  return activePolicy.has(feedbacks.join("|"));
 }
 
 function confirmNewGame() {
@@ -503,6 +616,7 @@ function showStartMenu() {
   els.startSetup.hidden = true;
   els.startMenu.hidden = false;
   els.dictionaryChoice.value = selectedDictionary;
+  els.strategyChoice.value = selectedStrategy;
   updateDictionaryCopy();
   const hasSavedGame = state.history.length > 0 || Boolean(state.selectedGuess);
   els.continueGame.disabled = !hasSavedGame;
@@ -512,8 +626,18 @@ function showStartMenu() {
 }
 function selectDictionary() {
   selectedDictionary = els.dictionaryChoice.value;
+  if (selectedDictionary === "broad" && selectedStrategy === "leaderboard") {
+    selectedStrategy = "fastest";
+    localStorage.setItem(STRATEGY_KEY, selectedStrategy);
+  }
   localStorage.setItem(DICTIONARY_KEY, selectedDictionary);
   updateDictionaryCopy();
+}
+function selectStrategy() {
+  selectedStrategy = els.strategyChoice.value;
+  localStorage.setItem(STRATEGY_KEY, selectedStrategy);
+  updateStrategyCopy();
+  updateStartDescription(selectedDictionary === "original" ? "salet" : selectedStartWord);
 }
 function editStartWord() {
   els.startWord.value = els.startWord.value.replace(/[^a-z]/gi, "").slice(0, 5).toUpperCase();
@@ -536,7 +660,9 @@ function validateStartWord() {
   selectedStartWord = word;
   localStorage.setItem(START_WORD_KEY, selectedStartWord);
   els.startWordNote.textContent = word === "salet" && selectedDictionary === "nyt"
-    ? "SALET enables the editor-aware deep-search strategy."
+    ? selectedStrategy === "leaderboard"
+      ? "SALET enables the editor-aware leaderboard strategy."
+      : "SALET enables the editor-aware deep-search strategy."
     : word === "salet"
       ? "SALET is the recommended default, or enter any accepted five-letter word."
     : `${word.toUpperCase()} will be the solver's first recommendation.`;
@@ -548,26 +674,50 @@ function updateDictionaryCopy() {
   const meta = DICTIONARY_META[selectedDictionary];
   els.dictionaryDescription.textContent = meta.description;
   const exact = selectedDictionary === "original";
+  if (selectedDictionary === "broad" && selectedStrategy === "leaderboard") {
+    selectedStrategy = "fastest";
+    localStorage.setItem(STRATEGY_KEY, selectedStrategy);
+  }
+  els.strategyChoice.value = selectedStrategy;
+  els.strategyChoice.querySelector('option[value="leaderboard"]').disabled = selectedDictionary === "broad";
   els.startWord.disabled = exact;
   els.startWord.value = (exact ? "salet" : selectedStartWord).toUpperCase();
   els.startWordNote.textContent = exact
-    ? "The exact Level 12 strategy is proven specifically for SALET."
+    ? selectedStrategy === "leaderboard"
+      ? "SALET is fixed so Level 13 can preserve the minimum-guess tree."
+      : "The exact Level 12 strategy is proven specifically for SALET."
     : selectedStartWord === "salet" && selectedDictionary === "nyt"
-      ? "SALET enables the editor-aware deep-search strategy."
+      ? selectedStrategy === "leaderboard"
+        ? "SALET enables the editor-aware leaderboard strategy."
+        : "SALET enables the editor-aware deep-search strategy."
       : selectedStartWord === "salet"
       ? "SALET is the recommended default, or enter any accepted five-letter word."
       : `${selectedStartWord.toUpperCase()} will be the solver's first recommendation.`;
   els.startWordNote.classList.remove("input-error");
+  updateStrategyCopy();
   updateStartDescription(exact ? "salet" : selectedStartWord);
+}
+function updateStrategyCopy() {
+  if (selectedDictionary === "broad") {
+    els.strategyNote.textContent = "The broad safety-net dictionary uses the flexible information strategy.";
+  } else if (selectedStrategy === "leaderboard") {
+    els.strategyNote.textContent = "Level 13 keeps guesses first, then hunts for a higher parenthetical tiebreak score.";
+  } else {
+    els.strategyNote.textContent = "Level 12 optimizes only for the fewest expected guesses.";
+  }
 }
 function updateStartDescription(word) {
   if (selectedDictionary === "original") {
-    els.startNewDescription.textContent = DICTIONARY_META.original.start;
+    els.startNewDescription.textContent = selectedStrategy === "leaderboard"
+      ? "Use SALET with the Level 13 leaderboard optimizer."
+      : DICTIONARY_META.original.start;
     return;
   }
   if (selectedDictionary === "nyt") {
     els.startNewDescription.textContent = word === "salet"
-      ? "Start with SALET and use the editor-aware deep-search strategy."
+      ? selectedStrategy === "leaderboard"
+        ? "Start with SALET using the Level 13 leaderboard optimizer."
+        : "Start with SALET and use the editor-aware deep-search strategy."
       : `Start with ${word.toUpperCase()}, then continue with the flexible strategy.`;
     return;
   }
@@ -580,6 +730,7 @@ function applyDictionary(dictionary) {
   answers = dictionaries[active];
   if (active !== "original") state.optimal = false;
   if (active !== "nyt") state.editorAware = false;
+  if (active === "broad") state.tiebreakAware = false;
 }
 function openGame() {
   applyDictionary(state.dictionary);
@@ -599,13 +750,14 @@ function showStrategyStats() {
 }
 function renderOverallStats() {
   const bestAverage = Math.min(...STRATEGY_STATS.map(item => item.average));
+  const bestTiebreak = Math.max(...STRATEGY_STATS.filter(item => item.average === bestAverage).map(item => item.averageTie));
   els.statsList.innerHTML = "";
   for (const item of STRATEGY_STATS) {
     const total = item.counts.reduce((sum, count) => sum + count, 0);
     const card = document.createElement("article");
-    card.className = `stats-card${item.average === bestAverage ? " best" : ""}`;
+    card.className = `stats-card${item.average === bestAverage && item.averageTie === bestTiebreak ? " best" : ""}`;
     const bars = item.counts.map(count => `<span style="width:${(count / total * 100).toFixed(3)}%"></span>`).join("");
-    const distribution = item.counts.map((count, index) => `${index + 2}: ${count.toLocaleString()}`).join(" · ");
+    const distribution = item.counts.map((count, index) => `${index + item.min}: ${count.toLocaleString()}`).join(" · ");
     card.innerHTML = `
       <div class="stats-card-head">
         <span class="stats-name"><strong>Level ${item.level}</strong><small>${item.name}</small></span>
@@ -614,7 +766,7 @@ function renderOverallStats() {
         <span class="stat-number">${item.max}</span>
       </div>
       <div class="distribution" aria-hidden="true">${bars}</div>
-      <p class="distribution-label">Guesses — ${distribution}</p>`;
+      <p class="distribution-label">Guesses — ${distribution}<br>Average tiebreak — ${item.averageTie.toFixed(2)}</p>`;
     els.statsList.append(card);
   }
 }
@@ -626,28 +778,38 @@ function compareKnownWord() {
     els.comparisonMessage.textContent = "Enter exactly five letters.";
     return;
   }
-  const paths = methodComparisons[word];
-  if (!paths) {
+  const storedPaths = methodComparisons[word];
+  const leaderboardPath = tiebreakComparisons[word];
+  if (!storedPaths || !leaderboardPath) {
     els.comparisonResults.hidden = true;
     els.comparisonMessage.textContent = "That word is not in the 2,315-answer comparison set.";
     return;
   }
-  const bestScore = Math.min(...paths.map(path => path.length));
-  const winners = STRATEGY_STATS.filter((_, index) => paths[index].length === bestScore).map(item => `Level ${item.level}`);
+  const paths = [...storedPaths, leaderboardPath];
+  const results = paths.map(path => ({
+    guesses: path.length,
+    tiebreak: tiebreakScore(path, word),
+  }));
+  const bestScore = Math.min(...results.map(result => result.guesses));
+  const bestTie = Math.max(...results.filter(result => result.guesses === bestScore).map(result => result.tiebreak));
+  const winners = STRATEGY_STATS.filter((_, index) =>
+    results[index].guesses === bestScore && results[index].tiebreak === bestTie
+  ).map(item => `Level ${item.level}`);
   els.comparisonWord.textContent = word.toUpperCase();
-  els.comparisonBest.textContent = `${winners.join(", ")} ${winners.length === 1 ? "wins" : "tie"} at ${bestScore} guess${bestScore === 1 ? "" : "es"}`;
+  els.comparisonBest.textContent = `${winners.join(", ")} ${winners.length === 1 ? "wins" : "tie"}: ${bestScore} guess${bestScore === 1 ? "" : "es"}, ${bestTie} tiebreak`;
   els.comparisonList.innerHTML = "";
   STRATEGY_STATS.forEach((item, index) => {
     const path = paths[index];
+    const result = results[index];
     const card = document.createElement("article");
-    card.className = `comparison-card${path.length === bestScore ? " best" : ""}`;
+    card.className = `comparison-card${result.guesses === bestScore && result.tiebreak === bestTie ? " best" : ""}`;
     const guessPath = path.map((guess, guessIndex) =>
       `${guessIndex ? '<span class="path-arrow">→</span>' : ""}<span class="path-word">${guess.toUpperCase()}</span>`
     ).join("");
     card.innerHTML = `
       <div class="comparison-card-head">
         <span class="stats-name"><strong>Level ${item.level}</strong><small>${item.name}</small></span>
-        <span class="comparison-score">${path.length} guess${path.length === 1 ? "" : "es"}</span>
+        <span class="comparison-score">${path.length} guess${path.length === 1 ? "" : "es"}<small>${result.tiebreak} tiebreak</small></span>
       </div>
       <div class="guess-path">${guessPath}</div>`;
     els.comparisonList.append(card);
@@ -658,27 +820,27 @@ function startNewGame() {
   const startWord = validateStartWord();
   if (!startWord) { els.startWord.focus(); return; }
   if ((state.history.length || state.selectedGuess) && !window.confirm("Erase the saved puzzle and start over?")) return;
-  state = freshState(selectedDictionary, startWord);
+  state = freshState(selectedDictionary, startWord, selectedStrategy);
   saveState();
   openGame();
 }
 function showNewGameSetup() {
-  if (selectedDictionary === "original") {
-    startNewGame();
-    return;
-  }
   updateDictionaryCopy();
   els.startMenu.hidden = true;
   els.stats.hidden = true;
   els.game.hidden = true;
   els.startSetup.hidden = false;
-  els.startWord.focus();
-  els.startWord.select();
+  if (!els.startWord.disabled) {
+    els.startWord.focus();
+    els.startWord.select();
+  } else {
+    els.strategyChoice.focus();
+  }
 }
 function continueSavedGame() { openGame(); }
 function startExistingPuzzle() {
   if ((state.history.length || state.selectedGuess) && !window.confirm("Erase the saved puzzle and enter a different one?")) return;
-  state = freshState(selectedDictionary, "salet");
+  state = freshState(selectedDictionary, "salet", selectedStrategy);
   saveState();
   openGame();
   showMessage("Enter the first word you already played, then match its tile colors.");
@@ -687,7 +849,8 @@ function startExistingPuzzle() {
 function resetGame() {
   const dictionary = state.dictionary;
   const startWord = state.startWord || "salet";
-  state = freshState(dictionary, startWord);
+  const strategy = state.strategy || "fastest";
+  state = freshState(dictionary, startWord, strategy);
   saveState(); openGame();
 }
 function showMessage(text) { els.message.textContent = text; }
@@ -699,9 +862,17 @@ function restoreState() {
     if (saved && Array.isArray(saved.history)) {
       const dictionary = DICTIONARY_META[saved.dictionary] ? saved.dictionary : "original";
       const startWord = dictionary === "original" ? "salet" : saved.startWord || "salet";
-      state = { ...freshState(dictionary, startWord), ...saved, dictionary, startWord };
+      // Saved games from before strategy selection retain their original
+      // fastest-only behavior instead of changing recommendations mid-puzzle.
+      const strategy = ["leaderboard", "fastest"].includes(saved.strategy)
+        ? saved.strategy
+        : "fastest";
+      state = { ...freshState(dictionary, startWord, strategy), ...saved, dictionary, startWord, strategy };
       if (typeof saved.editorAware !== "boolean") {
         state.editorAware = historyFollowsEditorPolicy(state.history);
+      }
+      if (typeof saved.tiebreakAware !== "boolean") {
+        state.tiebreakAware = historyFollowsTiebreakPolicy(state.history);
       }
     } else {
       state = freshState(selectedDictionary);

@@ -74,8 +74,16 @@
     <section id="start-setup" class="start-setup" hidden>
       <div class="welcome-copy">
         <p class="eyebrow">NEW PUZZLE</p>
-        <h2>Choose your starting word</h2>
-        <p>SALET is recommended, but you can begin with any accepted Wordle guess.</p>
+        <h2>Choose your strategy</h2>
+        <p>Optimize only for speed, or win the leaderboard tiebreak too.</p>
+      </div>
+      <div class="panel strategy-setting">
+        <label for="strategy-choice">Solver strategy</label>
+        <select id="strategy-choice">
+          <option value="leaderboard">Level 13 — Leaderboard Optimizer (recommended)</option>
+          <option value="fastest">Level 12 — Fastest guesses only</option>
+        </select>
+        <p id="strategy-note">Level 13 keeps guesses first, then hunts for a higher parenthetical tiebreak score.</p>
       </div>
       <div class="panel start-word-setting">
         <label for="start-word">Starting word</label>
@@ -109,9 +117,9 @@
       </section>
 
       <section class="panel editor-benchmark">
-        <p class="eyebrow">EDITOR-AWARE STRATEGY</p>
-        <h2>3.26 expected guesses</h2>
-        <p>Deep search over unused answers plus NYT's observed early-repeat pool. A frozen 192-puzzle backtest averaged 3.33 without seeing those answers.</p>
+        <p class="eyebrow">LEVEL 13 · LEADERBOARD OPTIMIZER</p>
+        <h2><span id="editor-average-guesses">3.26</span> guesses · <span id="editor-average-tiebreak">—</span> tiebreak</h2>
+        <p>Uses the editor-aware deep tree, then exploits equal-speed choices—including the leaderboard's duplicate-letter scoring bug—to maximize the score in parentheses.</p>
       </section>
 
       <details class="overall-stats">
@@ -121,7 +129,7 @@
         </div>
         <div id="stats-list" class="stats-list"></div>
         <div class="panel stats-note">
-          <p>Across all 2,315 answers, every method ranges from 2 to 5 guesses. Level 12 has the lowest average at 3.42.</p>
+          <p>Methods are ranked by average guesses first, then average tiebreak score. The leaderboard optimizer never trades a worse guess average for extra tiebreak points.</p>
         </div>
       </details>
       <button id="stats-back" class="primary-button" type="button">Back to modes</button>
@@ -170,6 +178,11 @@
           <strong id="accuracy-score">100%</strong>
           <small id="accuracy-detail">Every #1 recommendation followed</small>
           <div class="accuracy-track" aria-hidden="true"><span id="accuracy-bar"></span></div>
+        </div>
+        <div class="tiebreak-result">
+          <span>Leaderboard tiebreak</span>
+          <strong id="game-tiebreak-score">0</strong>
+          <small>Calculated with the leaderboard's duplicate-letter rule</small>
         </div>
         <button id="play-again" class="primary-button" type="button">New puzzle</button>
       </section>
