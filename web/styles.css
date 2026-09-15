@@ -109,6 +109,10 @@ h2 { margin-bottom: .7rem; font-size: 1.25rem; }
 .start-word-setting input:disabled { opacity: .65; cursor: not-allowed; }
 .start-word-setting p { margin: .55rem 0 0; color: var(--muted); font-size: .78rem; line-height: 1.4; }
 .start-word-setting p.input-error { color: var(--danger); }
+.strategy-setting { margin: .25rem 0 .75rem; }
+.strategy-setting label { display: block; margin-bottom: .45rem; color: var(--accent); font-size: .72rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.strategy-setting select { width: 100%; padding: .7rem; border: 1px solid var(--border); border-radius: .7rem; background: #141416; color: var(--text); font-weight: 700; }
+.strategy-setting p { margin: .55rem 0 0; color: var(--muted); font-size: .78rem; line-height: 1.4; }
 .setup-back { display: block; margin: .75rem auto 0; }
 .mode-list { display: grid; gap: .65rem; }
 .mode-button {
@@ -146,6 +150,7 @@ h2 { margin-bottom: .7rem; font-size: 1.25rem; }
 .comparison-card.best { border-color: var(--green); background: rgba(83,141,78,.12); }
 .comparison-card-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
 .comparison-score { color: var(--accent); font-weight: 800; white-space: nowrap; }
+.comparison-score small { display: block; margin-top: .15rem; color: var(--yellow); font-size: .68rem; text-align: right; }
 .guess-path { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin-top: .75rem; }
 .path-word { padding: .35rem .45rem; border-radius: .4rem; background: var(--panel-raised); font-size: .78rem; font-weight: 800; letter-spacing: .06em; }
 .path-arrow { color: var(--muted); font-size: .75rem; }
@@ -260,6 +265,11 @@ input {
 .accuracy-result > small { font-size: .78rem; }
 .accuracy-track { height: .45rem; margin-top: .8rem; overflow: hidden; border-radius: 999px; background: var(--border); }
 .accuracy-track span { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--green); transition: width .35s ease; }
+.tiebreak-result { margin-top: .75rem; padding: 1rem; border: 1px solid var(--yellow); border-radius: .85rem; background: rgba(181,159,59,.1); }
+.tiebreak-result > span, .tiebreak-result > small { display: block; color: var(--muted); }
+.tiebreak-result > span { font-size: .74rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.tiebreak-result > strong { display: block; margin: .25rem 0; color: var(--yellow); font-size: 2rem; }
+.tiebreak-result > small { font-size: .78rem; }
 
 footer { display: flex; justify-content: space-between; align-items: baseline; gap: .7rem; padding: 1rem .25rem 0; color: var(--muted); font-size: .75rem; }
 footer .text-button { margin: 0; }

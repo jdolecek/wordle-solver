@@ -1,17 +1,70 @@
+import pytest
+
 from wordle_solver.cli import (
     _best_expected_turns_guess,
     choose_live_guess,
     collect_existing_history,
     format_feedback,
     load_optimal_policy,
+    load_tiebreak_policy,
     load_words,
     ranked_live_alternatives,
 )
-from wordle_solver.core import WordleSolver, feedback_for
+from wordle_solver.core import (
+    WordleSolver,
+    feedback_for,
+    tiebreak_match_value,
+    tiebreak_score,
+)
+from scripts.build_tiebreak_strategies import Baseline, TiebreakBuilder
 
 
 def test_duplicate_letters_follow_wordle_rules():
     assert feedback_for("allee", "apple") == (2, 1, 0, 0, 2)
+
+
+def test_tiebreak_match_value_reproduces_duplicate_bug():
+    assert tiebreak_match_value("arena", "dream") == 6
+    assert sum(feedback_for("arena", "dream")) == 5
+    assert tiebreak_match_value("rrrrr", "cigar") == 6
+    assert tiebreak_match_value("count", "dream") == 0
+    assert tiebreak_match_value("dream", "dream") == 10
+
+
+def test_tiebreak_score_reproduces_supplied_boards():
+    assert tiebreak_score(["count", "dream"], "dream") == 50
+    assert tiebreak_score(["raise", "alert", "cream", "dream"], "dream") == 100
+    assert tiebreak_score(["share", "smear", "cream", "dream"], "dream") == 110
+    assert tiebreak_score(["salet", "beach", "arena", "dream"], "dream") == 76
+
+
+def test_tiebreak_score_rejects_paths_longer_than_wordle():
+    with pytest.raises(ValueError, match="more than six"):
+        tiebreak_score(["count"] * 7, "dream")
+
+
+def test_tiebreak_search_uses_score_to_break_equal_guess_cost():
+    answers = ["aback", "blurb"]
+    feedback = "".join("BYG"[mark] for mark in feedback_for("aback", "blurb"))
+    baseline = Baseline(answers, {(): "aback", (feedback,): "blurb"})
+    builder = TiebreakBuilder(baseline, answers, exact_threshold=2)
+
+    result = builder.exact(tuple(sorted(answers)), 0)
+
+    assert result.guesses == 3
+    assert result.word == "blurb"
+
+
+def test_tiebreak_search_never_trades_guesses_for_bug_points():
+    answers = ["cigar", "rebut"]
+    feedback = "".join("BYG"[mark] for mark in feedback_for("cigar", "rebut"))
+    baseline = Baseline(answers, {(): "cigar", (feedback,): "rebut"})
+    builder = TiebreakBuilder(baseline, [*answers, "rrrrr"], exact_threshold=2)
+
+    result = builder.exact(tuple(sorted(answers)), 0)
+
+    assert result.guesses == 3
+    assert result.word != "rrrrr"
 
 
 def test_candidates_are_filtered_by_feedback():
@@ -95,6 +148,26 @@ def test_bundled_optimal_policy_has_published_score():
     assert len(scores) == 2315
     assert sum(scores) == 7920
     assert max(scores) == 5
+
+
+def test_bundled_tiebreak_policy_preserves_guesses_and_improves_secondary_score():
+    policy, policy_answers = load_tiebreak_policy()
+    paths = {}
+    for answer in policy_answers:
+        history = []
+        path = []
+        for _turn in range(1, 7):
+            guess = policy[tuple(history)]
+            path.append(guess)
+            if guess == answer:
+                paths[answer] = path
+                break
+            history.append(format_feedback(feedback_for(guess, answer)).upper())
+
+    assert len(paths) == 2315
+    assert sum(map(len, paths.values())) <= 7920
+    assert sum(tiebreak_score(path, answer) for answer, path in paths.items()) > 168593
+    assert max(map(len, paths.values())) == 5
 
 
 def test_live_guess_can_accept_or_override_recommendation(monkeypatch):

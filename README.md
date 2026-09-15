@@ -23,8 +23,17 @@ With `SALET`, the editor-aware model averages 3.26 guesses across its current
 1,319-word primary set. In a frozen test made before puzzles 1,689–1,880, it
 averaged 3.33 on those 192 subsequent real answers. A custom opening leaves the
 fixed deep-search tree and uses the flexible strategy.
+New games also offer the **Level 13 Leaderboard Optimizer**. It uses a strict
+two-part objective: minimize expected guesses first, then maximize the
+parenthetical leaderboard tiebreak score without accepting a worse primary
+result. The tiebreak implementation intentionally reproduces the leaderboard's
+duplicate-letter bug. On the original 2,315 answers it averages 3.42030 guesses
+and 75.46 tiebreak points, versus Level 12's 3.42117 and 72.83. On the
+editor-aware model it keeps the same 3.26232 guess average while raising average
+tiebreak from 71.86 to 72.85. The mobile app defaults to this strategy but keeps
+the fastest-only trees selectable when starting a new puzzle.
 The comparison mode accepts a known original-list answer and shows the exact
-score and guess path for Levels 5, 10, 11, and 12.
+score, tiebreak score, and guess path for Levels 5, 10, 11, 12, and 13.
 
 The production bundle is published from the repository's `gh-pages` branch.
 For this repository the address is:
@@ -70,26 +79,28 @@ pytest
 wordle-solver
 ```
 
-At startup, choose one of three modes:
+At startup, choose one of four modes:
 
-- **Benchmark all loaded Wordle solutions:** the solver runs the four retained
-	strategies (Levels 5, 10, 11, and 12) against every answer in the loaded solution list and reports
+- **Benchmark all loaded Wordle solutions:** the solver runs the five retained
+	strategies (Levels 5, 10, 11, 12, and 13) against every answer in the loaded solution list and reports
 	average scores and solve rates. The lowest average score is the winner.
 	It also writes a complete transcript to `mode3.log` in the current directory.
 	Rankings for shared candidate states are cached, so equivalent branches across
 	different answers are calculated only once.
 
 - **Play with the solver:** with the bundled answer set, the solver follows the
-	provably optimal Level 12 decision tree. Custom dictionaries fall back to the
+	Level 13 leaderboard decision tree. Custom dictionaries fall back to the
 	greedy Level 5 information strategy. At every turn, press Enter to accept the
 	recommended word or type your own five-letter guess. An override exits the
 	fixed optimal tree and continues with fresh Level 5 recommendations. The live
 	display ranks guesses using the active strategy rather than English-frequency
 	answer likelihood. Level 12 shows its exact choice first, followed by five
 	Level 5 information-ranked override options; only the first choice carries the
-	global optimality guarantee.
+	global optimality guarantee. Level 13 preserves guess count as its primary
+	objective and uses leaderboard tiebreak value only to choose among equally
+	efficient continuations.
 - **Solve a known answer:** enter the answer once; the solver automatically runs
-	all four retained comparison strategies and reports every path and score.
+	all five retained comparison strategies and reports every path and score.
 
 - **Resume a puzzle:** enter every guess you have already played and its `g/y/b`
 	feedback. The solver validates the combined history, narrows the answer list,
@@ -109,6 +120,21 @@ the bundled 2,315 answers it starts with `SALET`, requires exactly 7,920 total
 guesses (3.42117 average), and solves every answer within five guesses. The
 result is globally optimal under a uniform answer probability and the original
 12,972-word accepted-guess set.
+
+Level 13 starts from the Level 12 and editor-aware deep trees, exhaustively
+optimizes small endgames, and replaces larger-state guesses only when they
+induce an equivalent candidate partition and preserve whether the current guess
+can solve. Its comparison tree uses the current expanded accepted-guess list,
+which finds a 7,918-guess tree on the original answers—two guesses below the
+published Level 12 total because the legal-guess pool is newer and larger. The
+secondary optimization is exact in searched endgames and proof-preserving in
+larger transformed states; it is not a claim of a globally maximum tiebreak
+across every possible full tree.
+
+The tiebreak score for guess row `r` is `(7-r) * match_value`, where a green is
+worth 2 and any other guessed letter found anywhere in the answer is worth 1.
+Unlike real Wordle feedback, the leaderboard does not consume duplicate letter
+occurrences. The final all-green row is included.
 
 Level 5 uses expected information gain with worst-case partition size as a
 tie-breaker. These are greedy mathematical strategies, not exhaustive proofs

@@ -43,6 +43,16 @@ score is 4,303 guesses, or 3.26232 across the primary set. The mobile app keeps
 the larger 3,209-word list active and falls back to flexible search whenever
 feedback leaves this tree, so an editorial surprise is not rejected.
 
+`tiebreak_strategy.txt` and `editor_tiebreak_strategy.txt` are the Level 13
+leaderboard variants. Generate them with
+`scripts/build_tiebreak_strategies.py`, then verify their complete answer paths
+with `scripts/verify_tiebreak_strategies.py`. Within its search, the builder
+minimizes aggregate guesses before maximizing cumulative tiebreak value. It
+exhaustively searches states of up to ten candidates and uses partition-equivalent,
+solve-eligibility-preserving substitutions in larger states. The original tree
+scores 7,918 total guesses and 174,682 tiebreak points; the editor tree scores
+4,303 guesses and 96,091 tiebreak points.
+
 After updating either expanded dictionary, run
 `scripts/build_dictionary_openings.py` to refresh the mobile app's precomputed
 second-turn rankings.

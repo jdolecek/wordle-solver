@@ -36,6 +36,32 @@ def filter_candidates(words: list[str], guess: str, result: Feedback) -> list[st
     return [word for word in words if feedback_for(guess, word) == result]
 
 
+def tiebreak_match_value(guess: str, answer: str) -> int:
+    """Return the leaderboard's per-row value, including its duplicate bug.
+
+    This intentionally does *not* consume matching letters. A non-green tile
+    earns one point whenever its letter occurs anywhere in the answer, even if
+    that occurrence was already credited to another tile. Keep this separate
+    from :func:`feedback_for`, which implements Wordle's real duplicate rules.
+    """
+    guess = guess.lower()
+    answer = answer.lower()
+    return sum(
+        2 if guess_letter == answer_letter else 1 if guess_letter in answer else 0
+        for guess_letter, answer_letter in zip(guess, answer)
+    )
+
+
+def tiebreak_score(guesses: list[str] | tuple[str, ...], answer: str) -> int:
+    """Return the cumulative parenthetical leaderboard score for one board."""
+    if len(guesses) > 6:
+        raise ValueError("a Wordle tiebreak path cannot contain more than six guesses")
+    return sum(
+        (7 - turn) * tiebreak_match_value(guess, answer)
+        for turn, guess in enumerate(guesses, start=1)
+    )
+
+
 @dataclass(frozen=True)
 class GuessScore:
     word: str

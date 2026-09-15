@@ -5,11 +5,18 @@ import contextlib
 import io
 import random
 import sys
+from collections import Counter
 from functools import lru_cache
 from math import log2
 from pathlib import Path
 
-from .core import Feedback, WordleSolver, feedback_for
+from .core import (
+    Feedback,
+    WordleSolver,
+    feedback_for,
+    tiebreak_match_value,
+    tiebreak_score,
+)
 
 STANDARD_OPENING = "salet"
 
@@ -30,11 +37,13 @@ def main() -> None:
     else:
         solver = WordleSolver(answers, guesses, aggressiveness=5)
         history = collect_existing_history(solver) if mode == "resume" else None
-        if optimal_strategy_available(answers) and optimal_history_supported(history or []):
+        if tiebreak_strategy_available(answers) and tiebreak_history_supported(history or []):
+            run_tiebreak_interactive(solver, history)
+        elif optimal_strategy_available(answers) and optimal_history_supported(history or []):
             run_optimal_interactive(solver, history)
         else:
             if history:
-                print("\nThat history is outside Level 12's fixed tree; continuing with Level 5.")
+                print("\nThat history is outside the fixed deep-search trees; continuing with Level 5.")
             run_interactive(solver, history)
 
 
@@ -66,7 +75,10 @@ def benchmark_all_answers(answers: list[str], guesses: list[str]) -> None:
     ]
     if optimal_strategy_available(answers):
         strategy_names.append("Level 12 provably optimal")
+    if tiebreak_strategy_available(answers):
+        strategy_names.append("Level 13 leaderboard optimizer")
     totals = [0] * len(strategy_names)
+    tiebreak_totals = [0] * len(strategy_names)
     solved = [0] * len(strategy_names)
     log_path = Path("mode3.log")
     print(f"\nBenchmarking {len(answers)} loaded solutions across {len(strategy_names)} strategies...")
@@ -79,14 +91,16 @@ def benchmark_all_answers(answers: list[str], guesses: list[str]) -> None:
     with log_path.open("w") as log:
         log.write(f"Mode 3 benchmark: {len(answers)} answers, {len(strategy_names)} strategies\n\n")
         for index, answer in enumerate(answers, start=1):
-            scores, transcript = _scores_for_answer(
+            scores, tiebreaks, transcript = _scores_for_answer(
                 answers, guesses, answer, capture=True, choice_cache=choice_cache
             )
             log.write(f"===== Answer {index}/{len(answers)}: {answer} =====\n")
             log.write(transcript)
             log.write("Scores: " + ", ".join(str(score) for score in scores) + "\n\n")
+            log.write("Tiebreaks: " + ", ".join(str(score) for score in tiebreaks) + "\n\n")
             for strategy_index, score in enumerate(scores):
                 totals[strategy_index] += score
+                tiebreak_totals[strategy_index] += tiebreaks[strategy_index]
                 solved[strategy_index] += score <= 6
             if index == 1 or index % 100 == 0 or index == len(answers):
                 progress = f"  Processed {index}/{len(answers)}"
@@ -95,20 +109,32 @@ def benchmark_all_answers(answers: list[str], guesses: list[str]) -> None:
 
     results = []
     for index, name in enumerate(strategy_names):
-        results.append((totals[index] / len(answers), name, solved[index]))
+        results.append(
+            (
+                totals[index] / len(answers),
+                -(tiebreak_totals[index] / len(answers)),
+                name,
+                solved[index],
+            )
+        )
     results.sort()
     print("\nMode 3 summary")
-    for average, name, solved_count in results:
-        print(f"  {name}: average {average:.2f}/6, solved in 6 or fewer {solved_count}/{len(answers)}")
-    print(f"  Best overall strategy: {results[0][1]} ({results[0][0]:.2f}/6 average)")
+    for average, negative_tiebreak, name, solved_count in results:
+        print(
+            f"  {name}: average {average:.2f}/6, "
+            f"tiebreak {-negative_tiebreak:.2f}, "
+            f"solved in 6 or fewer {solved_count}/{len(answers)}"
+        )
+    print(f"  Best overall strategy: {results[0][2]} ({results[0][0]:.2f}/6 average)")
     with log_path.open("a") as log:
         log.write("\nMode 3 summary\n")
-        for average, name, solved_count in results:
+        for average, negative_tiebreak, name, solved_count in results:
             log.write(
                 f"  {name}: average {average:.2f}/6, "
+                f"tiebreak {-negative_tiebreak:.2f}, "
                 f"solved in 6 or fewer {solved_count}/{len(answers)}\n"
             )
-        log.write(f"  Best overall strategy: {results[0][1]} ({results[0][0]:.2f}/6 average)\n")
+        log.write(f"  Best overall strategy: {results[0][2]} ({results[0][0]:.2f}/6 average)\n")
 
 
 def _scores_for_answer(
@@ -117,20 +143,34 @@ def _scores_for_answer(
     answer: str,
     capture: bool = False,
     choice_cache: dict[tuple[object, ...], tuple[str, ...]] | None = None,
-) -> tuple[list[int], str] | list[int]:
+) -> tuple[list[int], list[int], str] | tuple[list[int], list[int]]:
     """Reuse the mode-2 strategies while suppressing their per-guess output."""
     scores: list[int] = []
+    paths: list[list[str]] = []
     output = io.StringIO()
     with contextlib.redirect_stdout(output):
         solver = WordleSolver(answers, guesses, aggressiveness=5)
-        scores.append(solve_known_level(solver, answer, 5, choice_cache))
-        scores.append(solve_minimax_level(answers, guesses, answer, choice_cache))
-        scores.append(solve_expected_turns_level(answers, guesses, answer, choice_cache))
+        path: list[str] = []
+        scores.append(solve_known_level(solver, answer, 5, choice_cache, path))
+        paths.append(path)
+        path = []
+        scores.append(solve_minimax_level(answers, guesses, answer, choice_cache, path))
+        paths.append(path)
+        path = []
+        scores.append(solve_expected_turns_level(answers, guesses, answer, choice_cache, path))
+        paths.append(path)
         if optimal_strategy_available(answers):
-            scores.append(solve_optimal_level(answer))
+            path = []
+            scores.append(solve_optimal_level(answer, path))
+            paths.append(path)
+        if tiebreak_strategy_available(answers):
+            path = []
+            scores.append(solve_tiebreak_level(answer, path))
+            paths.append(path)
+    tiebreaks = [tiebreak_score(path, answer) for path in paths]
     if capture:
-        return scores, output.getvalue()
-    return scores
+        return scores, tiebreaks, output.getvalue()
+    return scores, tiebreaks
 
 
 def collect_existing_history(solver: WordleSolver) -> list[tuple[str, Feedback]]:
@@ -239,6 +279,20 @@ def optimal_history_supported(history: list[tuple[str, Feedback]]) -> bool:
     return tuple(feedback_history) in policy or bool(history and history[-1][1] == (2, 2, 2, 2, 2))
 
 
+def tiebreak_history_supported(history: list[tuple[str, Feedback]]) -> bool:
+    """Return whether prior guesses follow the leaderboard-optimized policy."""
+    policy, _ = load_tiebreak_policy()
+    feedback_history: list[str] = []
+    for guess, result in history:
+        expected = policy.get(tuple(feedback_history))
+        if guess != expected:
+            return False
+        feedback_history.append(format_feedback(result).upper())
+    return tuple(feedback_history) in policy or bool(
+        history and history[-1][1] == (2, 2, 2, 2, 2)
+    )
+
+
 def run_optimal_interactive(
     solver: WordleSolver, history: list[tuple[str, Feedback]] | None = None
 ) -> None:
@@ -284,12 +338,88 @@ def run_optimal_interactive(
             print(f"Input error: {error}", file=sys.stderr)
 
 
+def run_tiebreak_interactive(
+    solver: WordleSolver, history: list[tuple[str, Feedback]] | None = None
+) -> None:
+    """Play along the fewest-guesses-first leaderboard policy."""
+    history = list(history or [])
+    policy, _ = load_tiebreak_policy()
+    print("Wordle solver: Level 13 leaderboard optimizer.")
+    print("Primary goal: fewest guesses. Secondary goal: highest tiebreak score.")
+    while True:
+        candidates = solver.narrow(history)
+        if history and history[-1][1] == (2, 2, 2, 2, 2):
+            answer = history[-1][0]
+            path = [guess for guess, _result in history]
+            print(f"Puzzle solved with {answer.upper()} (tiebreak {tiebreak_score(path, answer)}).")
+            return
+        feedback_history = tuple(format_feedback(result).upper() for _, result in history)
+        recommended = policy[feedback_history]
+        print(f"\n{len(candidates)} possible answers remain.")
+        alternatives = ranked_tiebreak_alternatives(solver, candidates, recommended)
+        print("Level 13 recommendation and best override options:")
+        print(f"  1. {recommended.upper()} (leaderboard optimized)")
+        for rank, word in enumerate(alternatives, start=2):
+            print(f"  {rank}. {word.upper()} (tie-aware override)")
+        guess = choose_live_guess(recommended)
+        if guess is None:
+            return
+        overridden = guess != recommended
+        result_text = input(f"Enter result for {guess.upper()} (g/y/b), or quit: ").strip().lower()
+        if result_text in {"quit", "q", "exit"}:
+            return
+        try:
+            result = parse_feedback(result_text)
+            proposed = [*history, (guess, result)]
+            if not solver.narrow(proposed):
+                print("Input error: that feedback leaves no possible answers.", file=sys.stderr)
+                continue
+            history = proposed
+            if overridden and result != (2, 2, 2, 2, 2):
+                print(
+                    "\nOverride accepted. The fixed Level 13 path no longer applies; "
+                    "continuing with Level 5."
+                )
+                run_interactive(solver, history)
+                return
+        except ValueError as error:
+            print(f"Input error: {error}", file=sys.stderr)
+
+
 def ranked_live_alternatives(
     solver: WordleSolver, candidates: list[str], recommended: str, limit: int = 5
 ) -> list[str]:
     """Return strong heuristic overrides, excluding the exact-policy choice."""
     ranked = solver.rank_guesses(candidates, limit=min(len(solver.guesses), limit + 1))
     return [score.word for score in ranked if score.word != recommended][:limit]
+
+
+def ranked_tiebreak_alternatives(
+    solver: WordleSolver, candidates: list[str], recommended: str, limit: int = 5
+) -> list[str]:
+    """Rank overrides by expected work, then the buggy leaderboard reward."""
+    solved = (2, 2, 2, 2, 2)
+    candidate_set = set(candidates)
+    scored: list[tuple[int, int, int, bool, str]] = []
+    for guess in solver._guess_pool(candidates):
+        partitions: Counter[Feedback] = Counter(
+            feedback_for(guess, answer) for answer in candidates
+        )
+        expected_work = sum(
+            size * size for result, size in partitions.items() if result != solved
+        )
+        match_total = sum(tiebreak_match_value(guess, answer) for answer in candidates)
+        scored.append(
+            (
+                expected_work,
+                -match_total,
+                max(partitions.values()),
+                guess not in candidate_set,
+                guess,
+            )
+        )
+    words = [row[-1] for row in sorted(scored) if row[-1] != recommended]
+    return words[:limit]
 
 
 def solve_known_answers(answers: list[str], guesses: list[str]) -> None:
@@ -306,6 +436,7 @@ def solve_known_answers(answers: list[str], guesses: list[str]) -> None:
     minimax_score = solve_minimax_level(answers, guesses, answer)
     expected_turns_score = solve_expected_turns_level(answers, guesses, answer)
     optimal_score = solve_optimal_level(answer) if optimal_strategy_available(answers) else None
+    tiebreak_result = solve_tiebreak_level(answer) if tiebreak_strategy_available(answers) else None
 
     print("\nSummary")
     print(f"  Level 5 Greedy: {greedy_score}/6")
@@ -313,6 +444,8 @@ def solve_known_answers(answers: list[str], guesses: list[str]) -> None:
     print(f"  Level 11 Expected turns (Wordle guesses): {expected_turns_score}/6")
     if optimal_score is not None:
         print(f"  Level 12 Provably optimal: {optimal_score}/6")
+    if tiebreak_result is not None:
+        print(f"  Level 13 Leaderboard optimizer: {tiebreak_result}/6")
 
 
 def solve_known_level(
@@ -320,6 +453,7 @@ def solve_known_level(
     answer: str,
     aggressiveness: int,
     choice_cache: dict[tuple[object, ...], tuple[str, ...]] | None = None,
+    path_output: list[str] | None = None,
 ) -> int:
     candidates = solver.answers
     path: list[tuple[str, Feedback, int]] = []
@@ -347,7 +481,10 @@ def solve_known_level(
             guess = next((word for word in ranked if word not in attempted), answer)
 
     score = len(path)
+    if path_output is not None:
+        path_output.extend(guess for guess, _result, _count in path)
     print(f"Score: {score}/6")
+    print(f"Tiebreak: {tiebreak_score([guess for guess, _result, _count in path], answer)}")
     return score
 
 
@@ -467,6 +604,7 @@ def solve_adaptive_level(
 def solve_minimax_level(
     answers: list[str], guesses: list[str], answer: str,
     choice_cache: dict[tuple[object, ...], tuple[str, ...]] | None = None,
+    path_output: list[str] | None = None,
 ) -> int:
     """Use Wordle guesses, minimizing the worst-case remaining answer set."""
     solver = WordleSolver(answers, guesses, aggressiveness=5, include_answers_in_guesses=False)
@@ -500,13 +638,17 @@ def solve_minimax_level(
             break
 
     score = len(path)
+    if path_output is not None:
+        path_output.extend(path)
     print(f"Level 10 score: {score}/6")
+    print(f"Tiebreak: {tiebreak_score(path, answer)}")
     return score
 
 
 def solve_expected_turns_level(
     answers: list[str], guesses: list[str], answer: str,
     choice_cache: dict[tuple[object, ...], tuple[str, ...]] | None = None,
+    path_output: list[str] | None = None,
 ) -> int:
     """Minimize expected candidates left, treating an immediate solve as zero work."""
     solver = WordleSolver(answers, guesses, aggressiveness=5, include_answers_in_guesses=False)
@@ -540,25 +682,55 @@ def solve_expected_turns_level(
             break
 
     score = len(path)
+    if path_output is not None:
+        path_output.extend(path)
     print(f"Level 11 score: {score}/6")
+    print(f"Tiebreak: {tiebreak_score(path, answer)}")
     return score
 
 
-def solve_optimal_level(answer: str) -> int:
+def solve_optimal_level(answer: str, path_output: list[str] | None = None) -> int:
     """Follow the published globally optimal normal-mode decision tree."""
     policy, _ = load_optimal_policy()
     feedback_history: list[str] = []
+    path: list[str] = []
     print("\nLevel 12 (provably optimal decision tree)")
     for turn in range(1, 6):
         guess = policy[tuple(feedback_history)]
+        path.append(guess)
         result = feedback_for(guess, answer)
         feedback_text = format_feedback(result).upper()
         feedback_history.append(feedback_text)
         print(f"Guess {turn}: {guess.upper()} -> {feedback_text.lower()}")
         if guess == answer:
+            if path_output is not None:
+                path_output.extend(path)
             print(f"Level 12 score: {turn}/6")
+            print(f"Tiebreak: {tiebreak_score(path, answer)}")
             return turn
     raise RuntimeError(f"optimal strategy did not solve {answer}")
+
+
+def solve_tiebreak_level(answer: str, path_output: list[str] | None = None) -> int:
+    """Follow the fewest-guesses-first, tiebreak-maximizing decision tree."""
+    policy, _ = load_tiebreak_policy()
+    feedback_history: list[str] = []
+    path: list[str] = []
+    print("\nLevel 13 (leaderboard optimizer)")
+    for turn in range(1, 7):
+        guess = policy[tuple(feedback_history)]
+        path.append(guess)
+        result = feedback_for(guess, answer)
+        feedback_text = format_feedback(result).upper()
+        feedback_history.append(feedback_text)
+        print(f"Guess {turn}: {guess.upper()} -> {feedback_text.lower()}")
+        if guess == answer:
+            if path_output is not None:
+                path_output.extend(path)
+            tie = tiebreak_score(path, answer)
+            print(f"Level 13 score: {turn}/6, tiebreak {tie}")
+            return turn
+    raise RuntimeError(f"leaderboard strategy did not solve {answer}")
 
 
 def optimal_strategy_available(answers: list[str]) -> bool:
@@ -567,10 +739,28 @@ def optimal_strategy_available(answers: list[str]) -> bool:
     return set(answers) == policy_answers
 
 
+def tiebreak_strategy_available(answers: list[str]) -> bool:
+    """Return whether the bundled leaderboard policy matches this answer set."""
+    _, policy_answers = load_tiebreak_policy()
+    return set(answers) == policy_answers
+
+
 @lru_cache(maxsize=1)
 def load_optimal_policy() -> tuple[dict[tuple[str, ...], str], set[str]]:
     """Parse Alex Selby's fixed-width optimal decision-tree format."""
     path = Path(__file__).resolve().parents[2] / "data" / "optimal_strategy.txt"
+    return _load_policy(path)
+
+
+@lru_cache(maxsize=1)
+def load_tiebreak_policy() -> tuple[dict[tuple[str, ...], str], set[str]]:
+    """Load the bundled Level 13 leaderboard decision tree."""
+    path = Path(__file__).resolve().parents[2] / "data" / "tiebreak_strategy.txt"
+    return _load_policy(path)
+
+
+def _load_policy(path: Path) -> tuple[dict[tuple[str, ...], str], set[str]]:
+    """Parse a fixed-width decision tree and its all-green answer leaves."""
     policy: dict[tuple[str, ...], str] = {}
     answers: set[str] = set()
     guesses: list[str] = []
