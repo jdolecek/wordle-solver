@@ -12,7 +12,7 @@ const DICTIONARY_META = {
   },
   original: {
     label: "Original 2,315",
-    description: "Original public solution list. This is the only dictionary with the exact Level 12 guarantee.",
+    description: "Original public solution list. With SALET, this is the only dictionary with the exact Level 12 guarantee.",
     start: "Begin with SALET and follow the provably optimal Level 12 tree.",
   },
   broad: {
@@ -50,7 +50,7 @@ let selectedStrategy = "leaderboard";
 let state = freshState();
 
 function freshState(dictionary = selectedDictionary, startWord = selectedStartWord, strategy = selectedStrategy) {
-  const opener = dictionary === "original" ? "salet" : startWord;
+  const opener = startWord || "salet";
   const fixed = opener === "salet" && dictionary !== "broad";
   return {
     dictionary, startWord: opener, strategy, history: [],
@@ -579,7 +579,7 @@ function undoGuess() {
 }
 
 function historyFollowsPolicy(history) {
-  if (state.strategy !== "fastest" || state.dictionary !== "original") return false;
+  if (state.strategy !== "fastest" || state.dictionary !== "original" || state.startWord !== "salet") return false;
   const feedbacks = [];
   for (const item of history) {
     if (policy.get(feedbacks.join("|")) !== item.guess) return false;
@@ -637,7 +637,7 @@ function selectStrategy() {
   selectedStrategy = els.strategyChoice.value;
   localStorage.setItem(STRATEGY_KEY, selectedStrategy);
   updateStrategyCopy();
-  updateStartDescription(selectedDictionary === "original" ? "salet" : selectedStartWord);
+  updateStartDescription(selectedStartWord);
 }
 function editStartWord() {
   els.startWord.value = els.startWord.value.replace(/[^a-z]/gi, "").slice(0, 5).toUpperCase();
@@ -645,7 +645,6 @@ function editStartWord() {
   if (els.startWord.value.length === 5) validateStartWord();
 }
 function validateStartWord() {
-  if (selectedDictionary === "original") return "salet";
   const word = els.startWord.value.trim().toLowerCase();
   if (!/^[a-z]{5}$/.test(word)) {
     els.startWordNote.textContent = "Enter exactly five letters.";
@@ -659,47 +658,49 @@ function validateStartWord() {
   }
   selectedStartWord = word;
   localStorage.setItem(START_WORD_KEY, selectedStartWord);
-  els.startWordNote.textContent = word === "salet" && selectedDictionary === "nyt"
-    ? selectedStrategy === "leaderboard"
-      ? "SALET enables the editor-aware leaderboard strategy."
-      : "SALET enables the editor-aware deep-search strategy."
-    : word === "salet"
-      ? "SALET is the recommended default, or enter any accepted five-letter word."
-    : `${word.toUpperCase()} will be the solver's first recommendation.`;
+  els.startWordNote.textContent = startWordNote(word);
   els.startWordNote.classList.remove("input-error");
+  updateStrategyCopy();
   updateStartDescription(word);
   return word;
 }
 function updateDictionaryCopy() {
   const meta = DICTIONARY_META[selectedDictionary];
   els.dictionaryDescription.textContent = meta.description;
-  const exact = selectedDictionary === "original";
   if (selectedDictionary === "broad" && selectedStrategy === "leaderboard") {
     selectedStrategy = "fastest";
     localStorage.setItem(STRATEGY_KEY, selectedStrategy);
   }
   els.strategyChoice.value = selectedStrategy;
   els.strategyChoice.querySelector('option[value="leaderboard"]').disabled = selectedDictionary === "broad";
-  els.startWord.disabled = exact;
-  els.startWord.value = (exact ? "salet" : selectedStartWord).toUpperCase();
-  els.startWordNote.textContent = exact
-    ? selectedStrategy === "leaderboard"
-      ? "SALET is fixed so Level 13 can preserve the minimum-guess tree."
-      : "The exact Level 12 strategy is proven specifically for SALET."
-    : selectedStartWord === "salet" && selectedDictionary === "nyt"
-      ? selectedStrategy === "leaderboard"
-        ? "SALET enables the editor-aware leaderboard strategy."
-        : "SALET enables the editor-aware deep-search strategy."
-      : selectedStartWord === "salet"
-      ? "SALET is the recommended default, or enter any accepted five-letter word."
-      : `${selectedStartWord.toUpperCase()} will be the solver's first recommendation.`;
+  els.startWord.disabled = false;
+  els.startWord.value = selectedStartWord.toUpperCase();
+  els.startWordNote.textContent = startWordNote(selectedStartWord);
   els.startWordNote.classList.remove("input-error");
   updateStrategyCopy();
-  updateStartDescription(exact ? "salet" : selectedStartWord);
+  updateStartDescription(selectedStartWord);
+}
+function startWordNote(word) {
+  if (word !== "salet") {
+    return `${word.toUpperCase()} will open the puzzle; the flexible strategy takes over after it.`;
+  }
+  if (selectedDictionary === "original") {
+    return selectedStrategy === "leaderboard"
+      ? "SALET enables the precomputed Level 13 leaderboard tree."
+      : "SALET enables the exact Level 12 tree.";
+  }
+  if (selectedDictionary === "nyt") {
+    return selectedStrategy === "leaderboard"
+      ? "SALET enables the editor-aware leaderboard strategy."
+      : "SALET enables the editor-aware deep-search strategy.";
+  }
+  return "SALET is the recommended default, or enter any accepted five-letter word.";
 }
 function updateStrategyCopy() {
   if (selectedDictionary === "broad") {
     els.strategyNote.textContent = "The broad safety-net dictionary uses the flexible information strategy.";
+  } else if (selectedStartWord !== "salet") {
+    els.strategyNote.textContent = "A custom opener uses flexible recommendations after the first guess; choose SALET to activate the Level 12 or 13 tree.";
   } else if (selectedStrategy === "leaderboard") {
     els.strategyNote.textContent = "Level 13 keeps guesses first, then hunts for a higher parenthetical tiebreak score.";
   } else {
@@ -708,9 +709,11 @@ function updateStrategyCopy() {
 }
 function updateStartDescription(word) {
   if (selectedDictionary === "original") {
-    els.startNewDescription.textContent = selectedStrategy === "leaderboard"
-      ? "Use SALET with the Level 13 leaderboard optimizer."
-      : DICTIONARY_META.original.start;
+    els.startNewDescription.textContent = word === "salet"
+      ? selectedStrategy === "leaderboard"
+        ? "Start with SALET using the Level 13 leaderboard optimizer."
+        : DICTIONARY_META.original.start
+      : `Start with ${word.toUpperCase()}, then continue with the flexible strategy.`;
     return;
   }
   if (selectedDictionary === "nyt") {
@@ -726,7 +729,6 @@ function updateStartDescription(word) {
 function applyDictionary(dictionary) {
   const active = dictionaries[dictionary] ? dictionary : "nyt";
   state.dictionary = active;
-  if (active === "original") state.startWord = "salet";
   answers = dictionaries[active];
   if (active !== "original") state.optimal = false;
   if (active !== "nyt") state.editorAware = false;
@@ -861,13 +863,25 @@ function restoreState() {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (saved && Array.isArray(saved.history)) {
       const dictionary = DICTIONARY_META[saved.dictionary] ? saved.dictionary : "original";
-      const startWord = dictionary === "original" ? "salet" : saved.startWord || "salet";
+      let startWord = typeof saved.startWord === "string" ? saved.startWord.toLowerCase() : "salet";
+      if (!/^[a-z]{5}$/.test(startWord) || !acceptedGuesses.includes(startWord)) {
+        startWord = "salet";
+      }
       // Saved games from before strategy selection retain their original
       // fastest-only behavior instead of changing recommendations mid-puzzle.
       const strategy = ["leaderboard", "fastest"].includes(saved.strategy)
         ? saved.strategy
         : "fastest";
       state = { ...freshState(dictionary, startWord, strategy), ...saved, dictionary, startWord, strategy };
+      state.optimal = Boolean(
+        state.optimal && startWord === "salet" && strategy === "fastest" && dictionary === "original"
+      );
+      state.editorAware = Boolean(
+        state.editorAware && startWord === "salet" && strategy === "fastest" && dictionary === "nyt"
+      );
+      state.tiebreakAware = Boolean(
+        state.tiebreakAware && startWord === "salet" && strategy === "leaderboard" && dictionary !== "broad"
+      );
       if (typeof saved.editorAware !== "boolean") {
         state.editorAware = historyFollowsEditorPolicy(state.history);
       }

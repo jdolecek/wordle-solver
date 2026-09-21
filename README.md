@@ -16,9 +16,9 @@ exact Level 12 tree. The default NYT dictionary uses an editor-aware deep-search
 tree that prioritizes unused answers and the early-answer pool NYT has recently
 drawn repeats from, while retaining all 3,209 candidates as a safety net. Broad
 mode uses the flexible Level 5 strategy.
-New puzzles default to `SALET`, but the NYT and broad dictionaries let the
-player choose any accepted five-letter opening word. The original dictionary
-keeps `SALET` locked because its exact Level 12 proof applies to that tree.
+New puzzles default to `SALET`, but every dictionary lets the player choose any
+accepted five-letter opening word. The fixed Level 12 and Level 13 trees require
+`SALET`; a custom opening is played first and then uses the flexible strategy.
 With `SALET`, the editor-aware model averages 3.26 guesses across its current
 1,319-word primary set. In a frozen test made before puzzles 1,689–1,880, it
 averaged 3.33 on those 192 subsequent real answers. A custom opening leaves the

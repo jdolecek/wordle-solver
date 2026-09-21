@@ -106,7 +106,6 @@ h2 { margin-bottom: .7rem; font-size: 1.25rem; }
 .start-word-setting { margin: .25rem 0 1rem; }
 .start-word-setting label { display: block; margin-bottom: .45rem; color: var(--accent); font-size: .72rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .start-word-setting input { width: 100%; padding: .7rem; border: 1px solid var(--border); border-radius: .7rem; background: #141416; color: var(--text); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
-.start-word-setting input:disabled { opacity: .65; cursor: not-allowed; }
 .start-word-setting p { margin: .55rem 0 0; color: var(--muted); font-size: .78rem; line-height: 1.4; }
 .start-word-setting p.input-error { color: var(--danger); }
 .strategy-setting { margin: .25rem 0 .75rem; }
