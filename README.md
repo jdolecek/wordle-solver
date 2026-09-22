@@ -84,7 +84,6 @@ At startup, choose one of four modes:
 - **Benchmark all loaded Wordle solutions:** the solver runs the five retained
 	strategies (Levels 5, 10, 11, 12, and 13) against every answer in the loaded solution list and reports
 	average scores and solve rates. The lowest average score is the winner.
-	It also writes a complete transcript to `mode3.log` in the current directory.
 	Rankings for shared candidate states are cached, so equivalent branches across
 	different answers are calculated only once.
 

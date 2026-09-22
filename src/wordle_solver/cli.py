@@ -80,32 +80,22 @@ def benchmark_all_answers(answers: list[str], guesses: list[str]) -> None:
     totals = [0] * len(strategy_names)
     tiebreak_totals = [0] * len(strategy_names)
     solved = [0] * len(strategy_names)
-    log_path = Path("mode3.log")
     print(f"\nBenchmarking {len(answers)} loaded solutions across {len(strategy_names)} strategies...")
-    print(f"Complete transcript: {log_path.resolve()}")
     # Answers that produce the same feedback share the same candidate state.
     # Cache rankings by that state so the benchmark builds each strategy's
     # decision tree once instead of rediscovering it for every answer.
     choice_cache: dict[tuple[object, ...], tuple[str, ...]] = {}
 
-    with log_path.open("w") as log:
-        log.write(f"Mode 3 benchmark: {len(answers)} answers, {len(strategy_names)} strategies\n\n")
-        for index, answer in enumerate(answers, start=1):
-            scores, tiebreaks, transcript = _scores_for_answer(
-                answers, guesses, answer, capture=True, choice_cache=choice_cache
-            )
-            log.write(f"===== Answer {index}/{len(answers)}: {answer} =====\n")
-            log.write(transcript)
-            log.write("Scores: " + ", ".join(str(score) for score in scores) + "\n\n")
-            log.write("Tiebreaks: " + ", ".join(str(score) for score in tiebreaks) + "\n\n")
-            for strategy_index, score in enumerate(scores):
-                totals[strategy_index] += score
-                tiebreak_totals[strategy_index] += tiebreaks[strategy_index]
-                solved[strategy_index] += score <= 6
-            if index == 1 or index % 100 == 0 or index == len(answers):
-                progress = f"  Processed {index}/{len(answers)}"
-                print(progress)
-                log.write(progress + "\n")
+    for index, answer in enumerate(answers, start=1):
+        scores, tiebreaks = _scores_for_answer(
+            answers, guesses, answer, choice_cache=choice_cache
+        )
+        for strategy_index, score in enumerate(scores):
+            totals[strategy_index] += score
+            tiebreak_totals[strategy_index] += tiebreaks[strategy_index]
+            solved[strategy_index] += score <= 6
+        if index == 1 or index % 100 == 0 or index == len(answers):
+            print(f"  Processed {index}/{len(answers)}")
 
     results = []
     for index, name in enumerate(strategy_names):
@@ -126,29 +116,18 @@ def benchmark_all_answers(answers: list[str], guesses: list[str]) -> None:
             f"solved in 6 or fewer {solved_count}/{len(answers)}"
         )
     print(f"  Best overall strategy: {results[0][2]} ({results[0][0]:.2f}/6 average)")
-    with log_path.open("a") as log:
-        log.write("\nMode 3 summary\n")
-        for average, negative_tiebreak, name, solved_count in results:
-            log.write(
-                f"  {name}: average {average:.2f}/6, "
-                f"tiebreak {-negative_tiebreak:.2f}, "
-                f"solved in 6 or fewer {solved_count}/{len(answers)}\n"
-            )
-        log.write(f"  Best overall strategy: {results[0][2]} ({results[0][0]:.2f}/6 average)\n")
 
 
 def _scores_for_answer(
     answers: list[str],
     guesses: list[str],
     answer: str,
-    capture: bool = False,
     choice_cache: dict[tuple[object, ...], tuple[str, ...]] | None = None,
-) -> tuple[list[int], list[int], str] | tuple[list[int], list[int]]:
+) -> tuple[list[int], list[int]]:
     """Reuse the mode-2 strategies while suppressing their per-guess output."""
     scores: list[int] = []
     paths: list[list[str]] = []
-    output = io.StringIO()
-    with contextlib.redirect_stdout(output):
+    with contextlib.redirect_stdout(io.StringIO()):
         solver = WordleSolver(answers, guesses, aggressiveness=5)
         path: list[str] = []
         scores.append(solve_known_level(solver, answer, 5, choice_cache, path))
@@ -168,8 +147,6 @@ def _scores_for_answer(
             scores.append(solve_tiebreak_level(answer, path))
             paths.append(path)
     tiebreaks = [tiebreak_score(path, answer) for path in paths]
-    if capture:
-        return scores, tiebreaks, output.getvalue()
     return scores, tiebreaks
 
 
